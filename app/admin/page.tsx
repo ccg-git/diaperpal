@@ -72,7 +72,7 @@ export default function AdminPage() {
       })
       
       if (response.ok) {
-        setMessage('✅ Location verified and added!')
+        setMessage('setMessage('🎉 Amazing! Thank you for helping parents find safe changing stations. Your contribution makes a real difference! 💙')')
         setFormData({
           name: '',
           address: '',
@@ -106,7 +106,7 @@ export default function AdminPage() {
         <p className="text-gray-600 mb-6">Add a new verified changing station</p>
         
         {message && (
-          <div className={`mb-4 p-3 rounded ${
+          <div className={`mb-4 p-4 rounded-lg text-center font-semibold ${
             message.includes('✅') || message.includes('📍') 
               ? 'bg-green-50 text-green-800 border border-green-200' 
               : 'bg-red-50 text-red-800 border border-red-200'
