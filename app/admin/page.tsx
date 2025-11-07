@@ -72,7 +72,7 @@ export default function AdminPage() {
       })
       
       if (response.ok) {
-        setMessage('setMessage('🎉 Amazing! Thank you for helping parents find safe changing stations. Your contribution makes a real difference! 💙')')
+        setMessage('🎉 Amazing! Thank you for helping parents find safe changing stations. Your contribution makes a real difference! 💙')
         setFormData({
           name: '',
           address: '',
@@ -107,7 +107,7 @@ export default function AdminPage() {
         
         {message && (
           <div className={`mb-4 p-4 rounded-lg text-center font-semibold ${
-            message.includes('✅') || message.includes('📍') 
+            message.includes('✅') || message.includes('📍') || message.includes('🎉')
               ? 'bg-green-50 text-green-800 border border-green-200' 
               : 'bg-red-50 text-red-800 border border-red-200'
           }`}>
@@ -219,76 +219,90 @@ export default function AdminPage() {
                 </select>
               </div>
               
-              <div>
-                <label className="block text-sm font-semibold mb-2">Privacy Level *</label>
-                <select
-                  name="privacy_level"
-                  value={formData.privacy_level}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded px-3 py-2"
-                >
-                  <option value="private">🔒 Private (Enclosed room)</option>
-                  <option value="semi_private">🚪 Semi-Private (Stall)</option>
-                  <option value="exposed">👁️ Exposed (Open area)</option>
-                </select>
-              </div>
+              {formData.verification_status === 'verified_present' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold mb-2">Privacy Level *</label>
+                    <select
+                      name="privacy_level"
+                      value={formData.privacy_level}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded px-3 py-2"
+                    >
+                      <option value="private">🔒 Private (Enclosed room)</option>
+                      <option value="semi_private">🚪 Semi-Private (Stall)</option>
+                      <option value="exposed">👁️ Exposed (Open area)</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold mb-2">Cleanliness Rating *</label>
+                    <select
+                      name="cleanliness_rating"
+                      value={formData.cleanliness_rating}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded px-3 py-2"
+                    >
+                      <option value="5">⭐⭐⭐⭐⭐ (5 - Spotless)</option>
+                      <option value="4">⭐⭐⭐⭐ (4 - Clean)</option>
+                      <option value="3">⭐⭐⭐ (3 - Acceptable)</option>
+                      <option value="2">⭐⭐ (2 - Dirty)</option>
+                      <option value="1">⭐ (1 - Avoid)</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold mb-2">Strap Condition *</label>
+                    <select
+                      name="strap_condition"
+                      value={formData.strap_condition}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded px-3 py-2"
+                    >
+                      <option value="good">✅ Good</option>
+                      <option value="dirty">🧼 Dirty</option>
+                      <option value="broken">🔧 Broken</option>
+                      <option value="missing">❌ Missing</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold mb-2">Safety Rating *</label>
+                    <select
+                      name="safety_rating"
+                      value={formData.safety_rating}
+                      onChange={handleChange}
+                      className="w-full border border-gray-300 rounded px-3 py-2"
+                    >
+                      <option value="safe">✅ Safe</option>
+                      <option value="questionable">⚠️ Questionable</option>
+                      <option value="unsafe">❌ Unsafe</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold mb-2">Issues / Notes (optional)</label>
+                    <textarea
+                      name="issues"
+                      value={formData.issues}
+                      onChange={handleChange}
+                      placeholder="Any additional notes or issues..."
+                      className="w-full border border-gray-300 rounded px-3 py-2"
+                      rows={3}
+                    />
+                  </div>
+                </>
+              )}
               
-              <div>
-                <label className="block text-sm font-semibold mb-2">Cleanliness Rating *</label>
-                <select
-                  name="cleanliness_rating"
-                  value={formData.cleanliness_rating}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded px-3 py-2"
-                >
-                  <option value="5">⭐⭐⭐⭐⭐ (5 - Spotless)</option>
-                  <option value="4">⭐⭐⭐⭐ (4 - Clean)</option>
-                  <option value="3">⭐⭐⭐ (3 - Acceptable)</option>
-                  <option value="2">⭐⭐ (2 - Dirty)</option>
-                  <option value="1">⭐ (1 - Avoid)</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold mb-2">Strap Condition *</label>
-                <select
-                  name="strap_condition"
-                  value={formData.strap_condition}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded px-3 py-2"
-                >
-                  <option value="good">✅ Good</option>
-                  <option value="dirty">🧼 Dirty</option>
-                  <option value="broken">🔧 Broken</option>
-                  <option value="missing">❌ Missing</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold mb-2">Safety Rating *</label>
-                <select
-                  name="safety_rating"
-                  value={formData.safety_rating}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded px-3 py-2"
-                >
-                  <option value="safe">✅ Safe</option>
-                  <option value="questionable">⚠️ Questionable</option>
-                  <option value="unsafe">❌ Unsafe</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold mb-2">Issues / Notes (optional)</label>
-                <textarea
-                  name="issues"
-                  value={formData.issues}
-                  onChange={handleChange}
-                  placeholder="Any additional notes or issues..."
-                  className="w-full border border-gray-300 rounded px-3 py-2"
-                  rows={3}
-                />
-              </div>
+              {formData.verification_status !== 'verified_present' && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-sm text-yellow-800">
+                    {formData.verification_status === 'verified_absent' 
+                      ? '⚠️ Marking as "Verified Absent" - No changing station exists at this location.'
+                      : '⚠️ Marking as "Unverified" - Changing station existence not confirmed.'}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
