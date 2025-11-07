@@ -1,4 +1,5 @@
 'use client'
+
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import type { NearbyLocation } from '@/lib/types'
@@ -16,6 +17,7 @@ export default function MapPage() {
         (position) => {
           const { latitude, longitude } = position.coords
           setUserLocation({ lat: latitude, lng: longitude })
+
           fetchNearbyStations(latitude, longitude)
         },
         (err) => {
