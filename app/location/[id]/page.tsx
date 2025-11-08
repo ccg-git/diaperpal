@@ -12,25 +12,32 @@ export default function LocationPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [voted, setVoted] = useState(false)
+  const [photos, setPhotos] = useState<any[]>([])
 
   useEffect(() => {
     if (!id) return
 
     async function fetchStation() {
-      try {
-        const response = await fetch(`/api/locations/${id}`)
-        if (!response.ok) {
-          throw new Error('Station not found')
-        }
-        const data = await response.json()
-        setStation(data)
-      } catch (err) {
-        setError('Failed to load station details')
-      } finally {
-        setLoading(false)
-      }
+  try {
+    const response = await fetch(`/api/locations/${id}`)
+    if (!response.ok) {
+      throw new Error('Station not found')
     }
-
+    const data = await response.json()
+    setStation(data)
+    
+    // Fetch photos
+    const photosResponse = await fetch(`/api/photos/${data.facilities[0]?.id}`)
+    if (photosResponse.ok) {
+      const photosData = await photosResponse.json()
+      setPhotos(photosData)
+    }
+  } catch (err) {
+    setError('Failed to load station details')
+  } finally {
+    setLoading(false)
+  }
+}
     fetchStation()
   }, [id])
 
@@ -143,6 +150,28 @@ export default function LocationPage() {
                 {station.last_verified}
               </p>
             </div>
+            {photos.length > 0 && (
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-3">📸 Photos</h2>
+              <div className="grid grid-cols-2 gap-3">
+                {photos.map((photo: any) => (
+                  <div key={photo.id} className="relative rounded-lg overflow-hidden border-2 border-gray-200 shadow-sm">
+                    <img
+                      src={photo.photo_url}
+                      alt={photo.photo_type === 'station_open' ? 'Station folded up' : 'Station folded down'}
+                      className="w-full h-40 object-cover cursor-pointer hover:opacity-90 transition"
+                      onClick={() => window.open(photo.photo_url, '_blank')}
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                      <span className="text-white text-xs font-semibold">
+                        {photo.photo_type === 'station_open' ? '📁 Open' : '📂 Closed'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           </div>
 
           {station.issues && (

@@ -16,6 +16,14 @@ export default function AdminPage() {
     safety_rating: 'safe',
     issues: '',
   })
+
+  const [photos, setPhotos] = useState<{
+    station_open: File | null
+    station_closed: File | null
+  }>({
+    station_open: null,
+    station_closed: null,
+  })
   
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -65,37 +73,98 @@ export default function AdminPage() {
     
     setLoading(true)
     try {
+      // First, create the venue and facility
       const response = await fetch('/api/locations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       })
       
-      if (response.ok) {
-        setMessage('🎉 Amazing! Thank you for helping parents find safe changing stations. Your contribution makes a real difference! 💙')
-        setFormData({
-          name: '',
-          address: '',
-          venue_type: 'retail',
-          lat: null,
-          lng: null,
-          facility_type: 'family',
-          verification_status: 'verified_present',
-          privacy_level: 'private',
-          cleanliness_rating: 5,
-          strap_condition: 'good',
-          safety_rating: 'safe',
-          issues: '',
-        })
-      } else {
+      if (!response.ok) {
         const error = await response.json()
         setMessage(`❌ Error: ${error.error}`)
+        setLoading(false)
+        return
       }
+
+      const result = await response.json()
+      const facilityId = result.facility_id
+
+      // Upload photos if present
+      console.log('Photos to upload:', photos)
+      if (photos.station_open || photos.station_closed) {
+        console.log('Starting photo uploads...')
+        const photoUploads = []
+        
+        if (photos.station_open) {
+          console.log('Uploading station_open photo')
+          photoUploads.push(
+            uploadPhoto(photos.station_open, facilityId, 'station_open')
+          )
+        }
+        
+        if (photos.station_closed) {
+          console.log('Uploading station_closed photo')
+          photoUploads.push(
+            uploadPhoto(photos.station_closed, facilityId, 'station_closed')
+          )
+        }
+        
+        await Promise.all(photoUploads)
+        console.log('Photo uploads complete')
+      }
+
+      setMessage('🎉 Amazing! Thank you for helping parents find safe changing stations. Your contribution makes a real difference! 💙')
+      
+      // Reset form
+      setFormData({
+        name: '',
+        address: '',
+        venue_type: 'retail',
+        lat: null,
+        lng: null,
+        facility_type: 'family',
+        verification_status: 'verified_present',
+        privacy_level: 'private',
+        cleanliness_rating: 5,
+        strap_condition: 'good',
+        safety_rating: 'safe',
+        issues: '',
+      })
+      
+      setPhotos({
+        station_open: null,
+        station_closed: null,
+      })
     } catch (error) {
       console.error('Submit error:', error)
       setMessage('❌ Failed to submit')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function uploadPhoto(file: File, facilityId: string, photoType: string) {
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${facilityId}_${photoType}_${Date.now()}.${fileExt}`
+      
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('facility_id', facilityId)
+      formData.append('photo_type', photoType)
+      formData.append('file_name', fileName)
+      
+      const response = await fetch('/api/photos', {
+        method: 'POST',
+        body: formData,
+      })
+      
+      if (!response.ok) {
+        console.error('Photo upload failed:', await response.text())
+      }
+    } catch (error) {
+      console.error('Photo upload error:', error)
     }
   }
 
@@ -290,6 +359,56 @@ export default function AdminPage() {
                       className="w-full border border-gray-300 rounded px-3 py-2"
                       rows={3}
                     />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold mb-2">Photos (Optional)</label>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Station Open (folded up)</label>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png,image/webp,image/heic"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              if (file.size > 5 * 1024 * 1024) {
+                                alert('File too large. Max 5MB.')
+                                return
+                              }
+                              setPhotos(prev => ({ ...prev, station_open: file }))
+                            }
+                          }}
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                        />
+                        {photos.station_open && (
+                          <p className="text-xs text-green-600 mt-1">✓ {photos.station_open.name}</p>
+                        )}
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Station Closed (folded down)</label>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png,image/webp,image/heic"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              if (file.size > 5 * 1024 * 1024) {
+                                alert('File too large. Max 5MB.')
+                                return
+                              }
+                              setPhotos(prev => ({ ...prev, station_closed: file }))
+                            }
+                          }}
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                        />
+                        {photos.station_closed && (
+                          <p className="text-xs text-green-600 mt-1">✓ {photos.station_closed.name}</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
