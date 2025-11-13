@@ -10,72 +10,51 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const { id } = params
-
   try {
-    const { data: venueData, error: venueError } = await supabase
+    const { id } = params
+
+    // Get venue
+    const { data: venue, error: venueError } = await supabase
       .from('venues')
       .select('*')
       .eq('id', id)
       .single()
 
-    if (venueError) {
+    if (venueError || !venue) {
       return NextResponse.json(
-        { error: 'Location not found' },
+        { error: 'Venue not found' },
         { status: 404 }
       )
     }
 
-    const { data: facilitiesData, error: facilitiesError } = await supabase
+    // Get facilities for this venue
+    const { data: facilities, error: facilitiesError } = await supabase
       .from('facilities')
       .select('*')
       .eq('venue_id', id)
 
     if (facilitiesError) {
-      console.error('Facilities fetch error:', facilitiesError)
+      console.error('Facilities error:', facilitiesError)
     }
 
-    const { data: votesData, error: votesError } = await supabase
-      .from('votes')
-      .select('vote_type')
-      .eq('venue_id', id)
+    // Get photos for each facility
+    const facilitiesWithPhotos = await Promise.all(
+      (facilities || []).map(async (facility) => {
+        const { data: photos } = await supabase
+          .from('photos')
+          .select('*')
+          .eq('facility_id', facility.id)
 
-    if (votesError) {
-      console.error('Votes fetch error:', votesError)
-    }
-
-    const { data: reportsData, error: reportsError } = await supabase
-      .from('reports')
-      .select('*')
-      .eq('venue_id', id)
-
-    if (reportsError) {
-      console.error('Reports fetch error:', reportsError)
-    }
-
-    const votes = votesData || []
-    const votes_up = votes.filter((v: any) => v.vote_type === 'up').length
-    const votes_down = votes.filter((v: any) => v.vote_type === 'down').length
-    const reports = reportsData || []
-
-    const facilities = facilitiesData || []
-    const primaryFacility = facilities[0] || {}
+        return {
+          ...facility,
+          photos: photos || [],
+        }
+      })
+    )
 
     return NextResponse.json({
-      id: venueData.id,
-      name: venueData.name,
-      address: venueData.address,
-      privacy: primaryFacility.privacy_level || 'unknown',
-      gender_accessibility: primaryFacility.facility_type || 'unknown',
-      cleanliness: primaryFacility.cleanliness_rating || 0,
-      votes_up,
-      votes_down,
-      reports: reports.length,
-      last_verified: primaryFacility.verified_at
-        ? new Date(primaryFacility.verified_at).toLocaleDateString()
-        : 'Never',
-      facilities,
-      issues: primaryFacility.issues || '',
+      ...venue,
+      facilities: facilitiesWithPhotos,
     })
   } catch (error) {
     console.error('API error:', error)

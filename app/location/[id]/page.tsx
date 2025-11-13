@@ -1,229 +1,211 @@
-'use client'
-
-import { useParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import type { LocationDetail } from '@/lib/types'
 
-export default function LocationPage() {
-  const params = useParams()
-  const id = params?.id as string
-  const [station, setStation] = useState<LocationDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [voted, setVoted] = useState(false)
-  const [photos, setPhotos] = useState<any[]>([])
-
-  useEffect(() => {
-    if (!id) return
-
-    async function fetchStation() {
+async function getLocationDetails(id: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+  
   try {
-    const response = await fetch(`/api/locations/${id}`)
-    if (!response.ok) {
-      throw new Error('Station not found')
-    }
-    const data = await response.json()
-    setStation(data)
+    const res = await fetch(`${baseUrl}/api/locations/${id}`, {
+      cache: 'no-store',
+    })
     
-    // Fetch photos
-    const photosResponse = await fetch(`/api/photos/${data.facilities[0]?.id}`)
-    if (photosResponse.ok) {
-      const photosData = await photosResponse.json()
-      setPhotos(photosData)
+    if (!res.ok) {
+      return null
     }
-  } catch (err) {
-    setError('Failed to load station details')
-  } finally {
-    setLoading(false)
+    
+    return res.json()
+  } catch (error) {
+    console.error('Error fetching location:', error)
+    return null
   }
 }
-    fetchStation()
-  }, [id])
 
-  async function handleVote(voteType: 'up' | 'down') {
-    try {
-      await fetch('/api/votes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          station_id: id,
-          vote_type: voteType,
-        }),
-      })
-      setVoted(true)
-      setTimeout(() => setVoted(false), 2000)
-    } catch (err) {
-      console.error('Vote failed:', err)
-    }
+function getVenueTypeEmoji(type: string) {
+  switch (type) {
+    case 'food_drink': return '☕'
+    case 'shopping': return '🛍️'
+    case 'parks_outdoors': return '🌳'
+    case 'family_attractions': return '🎨'
+    case 'errands': return '📋'
+    default: return '📍'
+  }
+}
+
+function getPrivacyLevel(facility: any) {
+  if (facility.privacy_type === 'private') return '🔒🔒🔒 High Privacy'
+  if (facility.privacy_type === 'multi_stall' && facility.station_location === 'accessible_stall') return '🔒🔒 Medium Privacy'
+  return '🔒 Low Privacy'
+}
+
+function getGenderLabel(gender: string) {
+  switch (gender) {
+    case 'mens': return '👨 Men\'s Restroom'
+    case 'womens': return '👩 Women\'s Restroom'
+    case 'all_gender': return '🚻 All-Gender Restroom'
+    default: return gender
+  }
+}
+
+export default async function LocationDetailPage({ params }: { params: { id: string } }) {
+  const location = await getLocationDetails(params.id)
+  
+  if (!location) {
+    notFound()
   }
 
-  async function handleReport() {
-    const issue = prompt('What issue did you notice?')
-    if (!issue) return
+  const verifiedFacilities = location.facilities?.filter(
+    (f: any) => f.verification_status === 'verified_present'
+  ) || []
 
-    try {
-      await fetch('/api/reports', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          station_id: id,
-          issue_type: issue,
-        }),
-      })
-      alert('Thank you for reporting this issue!')
-    } catch (err) {
-      console.error('Report failed:', err)
-    }
-  }
+  const unverifiedFacilities = location.facilities?.filter(
+    (f: any) => f.verification_status === 'unverified'
+  ) || []
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-600">Loading...</p>
-      </div>
-    )
-  }
-
-  if (error || !station) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">{error || 'Station not found'}</p>
-          <Link href="/map" className="text-blue-600 hover:underline">
-            Back to map
-          </Link>
-        </div>
-      </div>
-    )
-  }
+  const absentFacilities = location.facilities?.filter(
+    (f: any) => f.verification_status === 'verified_absent'
+  ) || []
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-2xl mx-auto p-4">
-        <Link
-          href="/map"
-          className="text-blue-600 hover:text-blue-800 font-semibold mb-4 inline-block"
-        >
-          ← Back to Map
+        {/* Back Button */}
+        <Link href="/map" className="inline-block mb-4 text-blue-600 hover:text-blue-700 font-semibold">
+          ← Back to List
         </Link>
 
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            {station.name}
-          </h1>
-          <p className="text-gray-600 mb-6">{station.address}</p>
-
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="bg-gray-50 rounded p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                Privacy
-              </p>
-              <p className="text-lg font-semibold text-gray-900">
-                🔒 {station.privacy}
-              </p>
+        {/* Venue Header */}
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
+          <div className="flex items-start gap-3 mb-3">
+            <span className="text-4xl">{getVenueTypeEmoji(location.venue_type)}</span>
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold text-gray-900 mb-1">{location.name}</h1>
+              <p className="text-gray-600">{location.address}</p>
             </div>
-
-            <div className="bg-gray-50 rounded p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                Cleanliness
-              </p>
-              <p className="text-lg font-semibold text-gray-900">
-                ⭐ {station.cleanliness}/5
-              </p>
-            </div>
-
-            <div className="bg-gray-50 rounded p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                Gender Access
-              </p>
-              <p className="text-lg font-semibold text-gray-900">
-                👥 {station.gender_accessibility}
-              </p>
-            </div>
-
-            <div className="bg-gray-50 rounded p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                Last Verified
-              </p>
-              <p className="text-lg font-semibold text-gray-900">
-                {station.last_verified}
-              </p>
-            </div>
-            {photos.length > 0 && (
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-3">📸 Photos</h2>
-              <div className="grid grid-cols-2 gap-3">
-                {photos.map((photo: any) => (
-                  <div key={photo.id} className="relative rounded-lg overflow-hidden border-2 border-gray-200 shadow-sm">
-                    <img
-                      src={photo.photo_url}
-                      alt={photo.photo_type === 'station_open' ? 'Station folded up' : 'Station folded down'}
-                      className="w-full h-40 object-cover cursor-pointer hover:opacity-90 transition"
-                      onClick={() => window.open(photo.photo_url, '_blank')}
-                    />
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                      <span className="text-white text-xs font-semibold">
-                        {photo.photo_type === 'station_open' ? '📁 Open' : '📂 Closed'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
           </div>
 
-          {station.issues && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-yellow-800">
-                <strong>⚠️ Notes:</strong> {station.issues}
-              </p>
-            </div>
-          )}
-
-          <div className="bg-blue-50 rounded p-4 mb-6">
-            <p className="text-sm text-gray-600">
-              👍 {station.votes_up} people said this was accurate
-            </p>
-            <p className="text-sm text-gray-600">
-              👎 {station.votes_down} reported issues
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <button
-            onClick={() =>
-              window.open(
-                `https://www.google.com/maps/search/${encodeURIComponent(
-                  station.address
-                )}`
-              )
-            }
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg transition"
+          {/* Get Directions Button */}
+          
+            href={`https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg text-center transition"
           >
             📍 Get Directions
-          </button>
-
-          <button
-            onClick={() => handleVote('up')}
-            className={`w-full font-bold py-3 px-4 rounded-lg transition ${
-              voted
-                ? 'bg-green-500 text-white'
-                : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
-            }`}
-          >
-            {voted ? '✓ Thanks for voting!' : '👍 Still Accurate?'}
-          </button>
-
-          <button
-            onClick={handleReport}
-            className="w-full bg-red-50 hover:bg-red-100 text-red-700 font-bold py-3 px-4 rounded-lg border border-red-200 transition"
-          >
-            ⚠️ Report Issue
-          </button>
+          </a>
         </div>
+
+        {/* Verified Restrooms */}
+        {verifiedFacilities.length > 0 && (
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              ✅ Verified Changing Stations ({verifiedFacilities.length})
+            </h2>
+
+            {verifiedFacilities.map((facility: any) => (
+              <div key={facility.id} className="border-b border-gray-200 last:border-0 pb-4 mb-4 last:mb-0">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-bold text-lg">{getGenderLabel(facility.gender)}</h3>
+                  <span className="text-sm text-gray-600">
+                    {facility.privacy_type === 'private' ? 'Private' : 'Multi-stall'}
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">Privacy:</span>
+                    <span>{getPrivacyLevel(facility)}</span>
+                  </div>
+
+                  {facility.station_location && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Station Location:</span>
+                      <span>
+                        {facility.station_location === 'open_wall' ? 'Open wall' : 'Inside accessible/handicap stall'}
+                      </span>
+                    </div>
+                  )}
+
+                  {facility.location_in_venue && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Where in venue:</span>
+                      <span>{facility.location_in_venue}</span>
+                    </div>
+                  )}
+
+                  {/* Issues */}
+                  {(facility.safety_concern || facility.cleanliness_issue) && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mt-2">
+                      <p className="font-semibold text-yellow-800 mb-1">⚠️ Issues Reported:</p>
+                      <ul className="text-yellow-700 text-sm space-y-1">
+                        {facility.safety_concern && <li>• Safety concern</li>}
+                        {facility.cleanliness_issue && <li>• Cleanliness issue</li>}
+                      </ul>
+                      {facility.issues && (
+                        <p className="text-yellow-700 text-sm mt-2">{facility.issues}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Photos */}
+                  {facility.photos && facility.photos.length > 0 && (
+                    <div className="mt-3">
+                      <p className="font-semibold mb-2">📸 Photos:</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {facility.photos.map((photo: any) => (
+                          <img
+                            key={photo.id}
+                            src={photo.photo_url}
+                            alt="Changing station"
+                            className="w-full h-40 object-cover rounded border border-gray-200 cursor-pointer hover:opacity-90"
+                            onClick={() => window.open(photo.photo_url, '_blank')}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Unverified Restrooms */}
+        {unverifiedFacilities.length > 0 && (
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              ❓ Unverified Restrooms ({unverifiedFacilities.length})
+            </h2>
+            <p className="text-sm text-gray-600 mb-3">
+              These restrooms haven't been checked yet. Can you verify?
+            </p>
+            {unverifiedFacilities.map((facility: any) => (
+              <div key={facility.id} className="text-sm text-gray-700 mb-2">
+                • {getGenderLabel(facility.gender)} - {facility.privacy_type === 'private' ? 'Private' : 'Multi-stall'}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Absent Facilities */}
+        {absentFacilities.length > 0 && (
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              ❌ No Changing Station ({absentFacilities.length})
+            </h2>
+            {absentFacilities.map((facility: any) => (
+              <div key={facility.id} className="text-sm text-gray-700 mb-2">
+                • {getGenderLabel(facility.gender)} - No changing station available
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* No Data */}
+        {verifiedFacilities.length === 0 && unverifiedFacilities.length === 0 && absentFacilities.length === 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800">
+            No restroom data available yet. Be the first to add info!
+          </div>
+        )}
       </div>
     </div>
   )

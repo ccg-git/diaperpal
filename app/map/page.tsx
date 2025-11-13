@@ -1,7 +1,26 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import type { NearbyLocation } from '@/lib/types'
+
+interface Facility {
+  id: string
+  privacy_type: string
+  gender: string
+  verification_status: string
+  station_location: string
+  safety_concern: boolean
+  cleanliness_issue: boolean
+}
+
+interface NearbyLocation {
+  id: string
+  name: string
+  distance: number
+  lat: number
+  lng: number
+  venue_type: string
+  facilities: Facility[]
+}
 
 export default function MapPage() {
   const [view, setView] = useState<'map' | 'list'>('list')
@@ -42,6 +61,32 @@ export default function MapPage() {
       console.error('Error fetching stations:', err)
       setError('Failed to load nearby stations')
       setLoading(false)
+    }
+  }
+
+  function getVenueTypeEmoji(type: string) {
+    switch (type) {
+      case 'food_drink': return '☕'
+      case 'shopping': return '🛍️'
+      case 'parks_outdoors': return '🌳'
+      case 'family_attractions': return '🎨'
+      case 'errands': return '📋'
+      default: return '📍'
+    }
+  }
+
+  function getPrivacyLevel(facility: Facility) {
+    if (facility.privacy_type === 'private') return '🔒🔒🔒 High'
+    if (facility.privacy_type === 'multi_stall' && facility.station_location === 'accessible_stall') return '🔒🔒 Medium'
+    return '🔒 Low'
+  }
+
+  function getGenderLabel(gender: string) {
+    switch (gender) {
+      case 'mens': return '👨 Men\'s'
+      case 'womens': return '👩 Women\'s'
+      case 'all_gender': return '🚻 All-gender'
+      default: return gender
     }
   }
 
@@ -92,25 +137,55 @@ export default function MapPage() {
         {view === 'list' && stations.length > 0 && (
           <div className="space-y-3">
             <p className="text-gray-600 text-sm mb-4">
-              {stations.length} stations nearby
+              {stations.length} venues nearby
             </p>
-            {stations.map((station) => (
-              <Link key={station.id} href={`/location/${station.id}`}>
-                <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md hover:border-blue-300 transition cursor-pointer">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold text-gray-900">{station.name}</h3>
-                    <span className="text-blue-600 font-semibold text-sm bg-blue-50 px-2 py-1 rounded">
-                      {station.distance.toFixed(1)} mi
-                    </span>
+            {stations.map((station) => {
+              const verifiedFacilities = station.facilities.filter(
+                f => f.verification_status === 'verified_present'
+              )
+              
+              return (
+                <Link key={station.id} href={`/location/${station.id}`}>
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md hover:border-blue-300 transition cursor-pointer">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{getVenueTypeEmoji(station.venue_type)}</span>
+                        <h3 className="font-bold text-gray-900">{station.name}</h3>
+                      </div>
+                      <span className="text-blue-600 font-semibold text-sm bg-blue-50 px-2 py-1 rounded">
+                        {station.distance.toFixed(1)} mi
+                      </span>
+                    </div>
+
+                    {verifiedFacilities.length > 0 ? (
+                      <div className="space-y-1">
+                        {verifiedFacilities.map((facility) => (
+                          <div key={facility.id} className="text-sm text-gray-600 flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold">{getGenderLabel(facility.gender)}</span>
+                            <span>•</span>
+                            <span>{getPrivacyLevel(facility)}</span>
+                            {facility.safety_concern && (
+                              <>
+                                <span>•</span>
+                                <span className="text-red-600">⚠️ Safety</span>
+                              </>
+                            )}
+                            {facility.cleanliness_issue && (
+                              <>
+                                <span>•</span>
+                                <span className="text-yellow-600">⚠️ Clean</span>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No verified stations yet</p>
+                    )}
                   </div>
-                  <div className="flex gap-4 text-sm text-gray-600">
-                    <span>⭐ {station.cleanliness}/5</span>
-                    <span>🔒 {station.privacy}</span>
-                    <span>✓ {station.verified}</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              )
+            })}
           </div>
         )}
 
@@ -118,25 +193,32 @@ export default function MapPage() {
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             <div className="bg-gray-100 p-4 text-center">
               <p className="text-gray-600 text-sm">
-                📍 {stations.length} stations near your location
+                📍 {stations.length} venues near your location
               </p>
               <p className="text-gray-500 text-xs mt-2">
-                Tap a station below to see details
+                Tap a venue below to see details
               </p>
             </div>
             <div className="space-y-2 p-4">
-              {stations.slice(0, 5).map((station) => (
-                <Link key={station.id} href={`/location/${station.id}`}>
-                  <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded p-3 hover:shadow-md transition cursor-pointer">
-                    <div className="font-semibold text-blue-900 mb-1">
-                      📍 {station.distance.toFixed(1)} mi - {station.name}
+              {stations.slice(0, 5).map((station) => {
+                const verifiedCount = station.facilities.filter(
+                  f => f.verification_status === 'verified_present'
+                ).length
+                
+                return (
+                  <Link key={station.id} href={`/location/${station.id}`}>
+                    <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded p-3 hover:shadow-md transition cursor-pointer">
+                      <div className="font-semibold text-blue-900 mb-1 flex items-center gap-2">
+                        <span>{getVenueTypeEmoji(station.venue_type)}</span>
+                        <span>{station.distance.toFixed(1)} mi - {station.name}</span>
+                      </div>
+                      <div className="text-xs text-blue-800">
+                        {verifiedCount} verified restroom{verifiedCount !== 1 ? 's' : ''}
+                      </div>
                     </div>
-                    <div className="text-xs text-blue-800">
-                      Cleanliness: {station.cleanliness}/5
-                    </div>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                )
+              })}
             </div>
           </div>
         )}
