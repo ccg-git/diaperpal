@@ -52,6 +52,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
   // Add custom styles for Google Autocomplete dropdown
   useEffect(() => {
@@ -155,7 +156,7 @@ export default function AdminPage() {
   const onPlaceChanged = useCallback(() => {
     if (autocompleteRef.current) {
       const place = autocompleteRef.current.getPlace()
-      
+
       if (place.geometry?.location && place.place_id) {
         setVenueData(prev => ({
           ...prev,
@@ -167,6 +168,11 @@ export default function AdminPage() {
         }))
         setMessage('✅ Venue selected!')
         setTimeout(() => setMessage(''), 2000)
+
+        // Clear the input field after selection since we show the info in the green box
+        if (inputRef.current) {
+          inputRef.current.value = ''
+        }
       }
     }
   }, [])
@@ -363,6 +369,7 @@ export default function AdminPage() {
                 }}
               >
                 <input
+                  ref={inputRef}
                   type="text"
                   placeholder="Type venue name or address..."
                   className="w-full border-2 border-gray-300 rounded-lg px-4 py-4 text-lg focus:border-blue-500 focus:outline-none"
