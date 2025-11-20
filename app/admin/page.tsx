@@ -154,12 +154,35 @@ export default function AdminPage() {
     `
     document.head.appendChild(style)
 
+    // Watch for the pac-container to appear and hide icons dynamically
+    const observer = new MutationObserver(() => {
+      const pacContainers = document.querySelectorAll('.pac-container')
+      pacContainers.forEach(container => {
+        // Hide all icon elements
+        const icons = container.querySelectorAll('.pac-icon, .pac-icon-marker, [class*="icon"]')
+        icons.forEach(icon => {
+          if (icon instanceof HTMLElement) {
+            icon.style.display = 'none'
+            icon.style.visibility = 'hidden'
+            icon.style.width = '0'
+            icon.style.height = '0'
+          }
+        })
+      })
+    })
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    })
+
     // Cleanup function to remove styles when component unmounts
     return () => {
       const existingStyle = document.getElementById(styleId)
       if (existingStyle) {
         existingStyle.remove()
       }
+      observer.disconnect()
     }
   }, [])
 
