@@ -20,6 +20,70 @@ async function getLocationDetails(id: string) {
   }
 }
 
+async function getPlaceDetails(placeId: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+
+  try {
+    const res = await fetch(`${baseUrl}/api/places/${placeId}`, {
+      cache: 'no-store',
+    })
+
+    if (!res.ok) {
+      return null
+    }
+
+    return res.json()
+  } catch (error) {
+    console.error('Error fetching place details:', error)
+    return null
+  }
+}
+
+function getCurrentOpenStatus(opening_hours: any) {
+  if (!opening_hours) return null
+
+  const isOpen = opening_hours.open_now
+
+  if (!opening_hours.periods || opening_hours.periods.length === 0) {
+    return { isOpen, text: isOpen ? 'Open' : 'Closed' }
+  }
+
+  // Get current day and time
+  const now = new Date()
+  const currentDay = now.getDay() // 0 = Sunday, 6 = Saturday
+  const currentTime = now.getHours() * 100 + now.getMinutes()
+
+  // Find today's hours
+  const todayPeriod = opening_hours.periods.find((p: any) => p.open?.day === currentDay)
+
+  if (todayPeriod && todayPeriod.close) {
+    const closeTime = todayPeriod.close.time
+    const closeHour = Math.floor(parseInt(closeTime) / 100)
+    const closeMin = parseInt(closeTime) % 100
+    const closeFormatted = `${closeHour > 12 ? closeHour - 12 : closeHour}:${closeMin.toString().padStart(2, '0')} ${closeHour >= 12 ? 'PM' : 'AM'}`
+
+    return {
+      isOpen,
+      text: isOpen ? `Open · Closes ${closeFormatted}` : `Closed · Opens ${closeFormatted}`
+    }
+  }
+
+  return { isOpen, text: isOpen ? 'Open' : 'Closed' }
+}
+
+function formatBusinessCategory(types: string[]) {
+  if (!types || types.length === 0) return null
+
+  // Filter out generic types and get the most specific one
+  const exclude = ['point_of_interest', 'establishment', 'food', 'store']
+  const filtered = types.filter(t => !exclude.includes(t))
+
+  if (filtered.length === 0) return null
+
+  // Format the type (e.g., "coffee_shop" -> "Coffee shop")
+  return filtered[0].replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
 function getVenueTypeEmoji(type: string) {
   switch (type) {
     case 'food_drink': return '☕'
@@ -54,6 +118,11 @@ export default async function LocationDetailPage(props: { params: { id: string }
     notFound()
   }
 
+  // Fetch Google Places details if we have a place_id
+  const placeDetails = location.place_id ? await getPlaceDetails(location.place_id) : null
+  const openStatus = placeDetails?.opening_hours ? getCurrentOpenStatus(placeDetails.opening_hours) : null
+  const businessCategory = placeDetails?.types ? formatBusinessCategory(placeDetails.types) : null
+
   const verifiedFacilities = (location.facilities || []).filter(
     (f: any) => f.verification_status === 'verified_present'
   )
@@ -74,22 +143,67 @@ export default async function LocationDetailPage(props: { params: { id: string }
         </Link>
 
         <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
-          <div className="flex items-start gap-3 mb-3">
+          <div className="flex items-start gap-3 mb-4">
             <span className="text-4xl">{getVenueTypeEmoji(location.venue_type)}</span>
             <div className="flex-1">
               <h1 className="text-2xl font-bold text-gray-900 mb-1">{location.name}</h1>
-              <p className="text-gray-600">{location.address}</p>
+
+              {/* Rating and Reviews */}
+              {placeDetails?.rating && (
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg font-semibold">{placeDetails.rating}</span>
+                  <div className="flex text-yellow-400">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <span key={i}>
+                        {i < Math.floor(placeDetails.rating) ? '⭐' : i < Math.ceil(placeDetails.rating) ? '⭐' : '☆'}
+                      </span>
+                    ))}
+                  </div>
+                  {placeDetails.user_ratings_total && (
+                    <span className="text-gray-600 text-sm">({placeDetails.user_ratings_total})</span>
+                  )}
+                </div>
+              )}
+
+              {/* Business Category and Accessibility */}
+              <div className="flex items-center gap-2 text-gray-600 text-sm mb-2">
+                {businessCategory && <span>{businessCategory}</span>}
+                {businessCategory && placeDetails?.wheelchair_accessible_entrance && <span>·</span>}
+                {placeDetails?.wheelchair_accessible_entrance && <span>♿</span>}
+                {(businessCategory || placeDetails?.wheelchair_accessible_entrance) && <span>·</span>}
+                <span>{location.address}</span>
+              </div>
+
+              {/* Open/Closed Status */}
+              {openStatus && (
+                <div className={`text-sm font-semibold ${openStatus.isOpen ? 'text-green-600' : 'text-red-600'}`}>
+                  {openStatus.text}
+                </div>
+              )}
             </div>
           </div>
 
-          <a
-            href={`https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg text-center transition"
-          >
-            📍 Get Directions
-          </a>
+          {/* Action Buttons */}
+          <div className="flex gap-3">
+            {placeDetails?.website && (
+              <a
+                href={placeDetails.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-3 rounded-lg text-center transition flex items-center justify-center gap-2"
+              >
+                🌐 Website
+              </a>
+            )}
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-lg text-center transition flex items-center justify-center gap-2"
+            >
+              📍 Directions
+            </a>
+          </div>
         </div>
 
         {verifiedFacilities.length > 0 && (
