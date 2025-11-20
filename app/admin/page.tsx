@@ -134,7 +134,7 @@ export default function AdminPage() {
         max-width: none !important;
       }
       .pac-icon {
-        margin-top: 0 !important;
+        display: none !important;
       }
     `
     document.head.appendChild(style)
