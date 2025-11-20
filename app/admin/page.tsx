@@ -71,8 +71,8 @@ export default function AdminPage() {
         margin-top: 4px !important;
         z-index: 9999 !important;
         width: auto !important;
-        min-width: 300px !important;
-        max-width: 600px !important;
+        min-width: 400px !important;
+        max-width: none !important;
       }
       .pac-item {
         padding: 12px 16px !important;
@@ -84,7 +84,7 @@ export default function AdminPage() {
         overflow: visible !important;
         text-overflow: clip !important;
         height: auto !important;
-        min-height: 40px !important;
+        min-height: 50px !important;
       }
       .pac-item:first-child {
         border-top: none !important;
@@ -100,30 +100,41 @@ export default function AdminPage() {
         margin-bottom: 4px !important;
         white-space: normal !important;
         word-wrap: break-word !important;
+        word-break: break-word !important;
         overflow: visible !important;
         text-overflow: clip !important;
-        max-width: 100% !important;
+        max-width: none !important;
+        width: 100% !important;
       }
       .pac-matched {
         font-weight: 700 !important;
         color: #2563eb !important;
       }
-      .pac-item-query + span {
+      .pac-item-query + span,
+      .pac-item span:not(.pac-item-query):not(.pac-matched) {
         font-size: 14px !important;
         color: #6b7280 !important;
         display: block !important;
         line-height: 1.5 !important;
         white-space: normal !important;
         word-wrap: break-word !important;
+        word-break: break-word !important;
         margin-top: 2px !important;
         overflow: visible !important;
         text-overflow: clip !important;
-        max-width: 100% !important;
+        max-width: none !important;
+        width: 100% !important;
       }
       .pac-item span {
         white-space: normal !important;
         word-wrap: break-word !important;
+        word-break: break-word !important;
         overflow: visible !important;
+        text-overflow: clip !important;
+        max-width: none !important;
+      }
+      .pac-icon {
+        margin-top: 0 !important;
       }
     `
     document.head.appendChild(style)
