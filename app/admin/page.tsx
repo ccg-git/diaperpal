@@ -58,8 +58,11 @@ export default function AdminPage() {
   useEffect(() => {
     const styleId = 'google-autocomplete-styles'
 
-    // Check if styles are already injected
-    if (document.getElementById(styleId)) return
+    // Remove existing styles if present to force refresh
+    const existingStyle = document.getElementById(styleId)
+    if (existingStyle) {
+      existingStyle.remove()
+    }
 
     const style = document.createElement('style')
     style.id = styleId
@@ -137,6 +140,7 @@ export default function AdminPage() {
       .pac-icon {
         display: none !important;
       }
+      /* Force refresh v2 */
     `
     document.head.appendChild(style)
 
