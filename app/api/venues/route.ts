@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
         lng,
         google_place_id: place_id || null,
         venue_type,
-        coordinates: `POINT(${lng} ${lat})`,
+         coordinates: `POINT(${lng} ${lat})`,
         data_source: 'google_places',
         created_at: new Date().toISOString(),
       })
