@@ -2,50 +2,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useJsApiLoader, Autocomplete } from '@react-google-maps/api'
 
-// Add custom styles for Google Autocomplete dropdown
-if (typeof window !== 'undefined') {
-  const style = document.createElement('style')
-  style.innerHTML = `
-    .pac-container {
-      font-family: inherit !important;
-      font-size: 16px !important;
-      border-radius: 8px !important;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
-      margin-top: 4px !important;
-      z-index: 9999 !important;
-    }
-    .pac-item {
-      padding: 12px 16px !important;
-      cursor: pointer !important;
-      border-top: 1px solid #e5e7eb !important;
-    }
-    .pac-item:first-child {
-      border-top: none !important;
-    }
-    .pac-item:hover {
-      background-color: #f3f4f6 !important;
-    }
-    .pac-item-query {
-      font-size: 16px !important;
-      font-weight: 600 !important;
-      color: #1f2937 !important;
-      display: block !important;
-      margin-bottom: 4px !important;
-    }
-    .pac-matched {
-      font-weight: 700 !important;
-      color: #2563eb !important;
-    }
-    .pac-item-query + span {
-      font-size: 14px !important;
-      color: #6b7280 !important;
-      display: block !important;
-      line-height: 1.4 !important;
-    }
-  `
-  document.head.appendChild(style)
-}
-
 const libraries: ("places")[] = ["places"]
 
 interface Restroom {
@@ -96,6 +52,64 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
+
+  // Add custom styles for Google Autocomplete dropdown
+  useEffect(() => {
+    const styleId = 'google-autocomplete-styles'
+
+    // Check if styles are already injected
+    if (document.getElementById(styleId)) return
+
+    const style = document.createElement('style')
+    style.id = styleId
+    style.innerHTML = `
+      .pac-container {
+        font-family: inherit !important;
+        font-size: 16px !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+        margin-top: 4px !important;
+        z-index: 9999 !important;
+      }
+      .pac-item {
+        padding: 12px 16px !important;
+        cursor: pointer !important;
+        border-top: 1px solid #e5e7eb !important;
+      }
+      .pac-item:first-child {
+        border-top: none !important;
+      }
+      .pac-item:hover {
+        background-color: #f3f4f6 !important;
+      }
+      .pac-item-query {
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        color: #1f2937 !important;
+        display: block !important;
+        margin-bottom: 4px !important;
+      }
+      .pac-matched {
+        font-weight: 700 !important;
+        color: #2563eb !important;
+      }
+      .pac-item-query + span {
+        font-size: 14px !important;
+        color: #6b7280 !important;
+        display: block !important;
+        line-height: 1.4 !important;
+      }
+    `
+    document.head.appendChild(style)
+
+    // Cleanup function to remove styles when component unmounts
+    return () => {
+      const existingStyle = document.getElementById(styleId)
+      if (existingStyle) {
+        existingStyle.remove()
+      }
+    }
+  }, [])
 
   const onLoad = useCallback((autocomplete: google.maps.places.Autocomplete) => {
     autocompleteRef.current = autocomplete
@@ -302,35 +316,29 @@ export default function AdminPage() {
             <h2 className="text-lg font-semibold mb-3">Venue Info</h2>
 
             <div>
-  <label className="block text-sm font-semibold mb-1">Search Venue *</label>
-  <Autocomplete
-    onLoad={onLoad}
-    onPlaceChanged={onPlaceChanged}
-    options={{
-      types: ['establishment'],
-      componentRestrictions: { country: 'us' },
-    }}
-  >
-    <input
-      type="text"
-      placeholder="Type venue name or address..."
-      className="w-full border-2 border-gray-300 rounded-lg px-4 py-4 text-lg focus:border-blue-500 focus:outline-none"
-      style={{ fontSize: '16px' }}
-    />
-  </Autocomplete>
-  {venueData.name && (
-    <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-      <p className="font-bold text-green-800">{venueData.name}</p>
-      <p className="text-sm text-green-700">{venueData.address}</p>
-    </div>
-  )}
-</div>
-                {venueData.name && (
-                  <p className="text-xs text-green-600 mt-1">
-                    ✅ {venueData.name} - {venueData.address}
-                  </p>
-                )}
-              </div>
+              <label className="block text-sm font-semibold mb-1">Search Venue *</label>
+              <Autocomplete
+                onLoad={onLoad}
+                onPlaceChanged={onPlaceChanged}
+                options={{
+                  types: ['establishment'],
+                  componentRestrictions: { country: 'us' },
+                }}
+              >
+                <input
+                  type="text"
+                  placeholder="Type venue name or address..."
+                  className="w-full border-2 border-gray-300 rounded-lg px-4 py-4 text-lg focus:border-blue-500 focus:outline-none"
+                  style={{ fontSize: '16px' }}
+                />
+              </Autocomplete>
+              {venueData.name && (
+                <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="font-bold text-green-800">{venueData.name}</p>
+                  <p className="text-sm text-green-700">{venueData.address}</p>
+                </div>
+              )}
+            </div>
 
               <div>
                 <label className="block text-sm font-semibold mb-1">Venue Type *</label>
