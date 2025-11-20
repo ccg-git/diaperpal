@@ -340,21 +340,20 @@ export default function AdminPage() {
               )}
             </div>
 
-              <div>
-                <label className="block text-sm font-semibold mb-1">Venue Type *</label>
-                <select
-                  name="venue_type"
-                  value={venueData.venue_type}
-                  onChange={handleVenueChange}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-base"
-                >
-                  <option value="food_drink">☕ Food & Drink</option>
-                  <option value="shopping">🛍️ Shopping</option>
-                  <option value="parks_outdoors">🌳 Parks & Outdoors</option>
-                  <option value="family_attractions">🎨 Family Attractions</option>
-                  <option value="errands">📋 Errands</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">Venue Type *</label>
+              <select
+                name="venue_type"
+                value={venueData.venue_type}
+                onChange={handleVenueChange}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-base"
+              >
+                <option value="food_drink">☕ Food & Drink</option>
+                <option value="shopping">🛍️ Shopping</option>
+                <option value="parks_outdoors">🌳 Parks & Outdoors</option>
+                <option value="family_attractions">🎨 Family Attractions</option>
+                <option value="errands">📋 Errands</option>
+              </select>
             </div>
           </div>
 
