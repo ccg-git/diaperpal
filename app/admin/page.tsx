@@ -139,8 +139,18 @@ export default function AdminPage() {
       }
       .pac-icon {
         display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        opacity: 0 !important;
       }
-      /* Force refresh v2 */
+      .pac-icon-marker {
+        display: none !important;
+      }
+      img[class*="pac-icon"] {
+        display: none !important;
+      }
+      /* Force refresh v3 */
     `
     document.head.appendChild(style)
 
