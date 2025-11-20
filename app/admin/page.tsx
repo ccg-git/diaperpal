@@ -58,11 +58,7 @@ export default function AdminPage() {
   useEffect(() => {
     const styleId = 'google-autocomplete-styles'
 
-    // Remove existing styles if present to force refresh
-    const existingStyle = document.getElementById(styleId)
-    if (existingStyle) {
-      existingStyle.remove()
-    }
+    if (document.getElementById(styleId)) return
 
     const style = document.createElement('style')
     style.id = styleId
@@ -74,21 +70,11 @@ export default function AdminPage() {
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
         margin-top: 4px !important;
         z-index: 9999 !important;
-        width: auto !important;
-        min-width: 400px !important;
-        max-width: none !important;
       }
       .pac-item {
         padding: 12px 16px !important;
         cursor: pointer !important;
         border-top: 1px solid #e5e7eb !important;
-        line-height: 1.5 !important;
-        white-space: normal !important;
-        word-wrap: break-word !important;
-        overflow: visible !important;
-        text-overflow: clip !important;
-        height: auto !important;
-        min-height: 50px !important;
       }
       .pac-item:first-child {
         border-top: none !important;
@@ -100,89 +86,19 @@ export default function AdminPage() {
         font-size: 16px !important;
         font-weight: 600 !important;
         color: #1f2937 !important;
-        display: block !important;
-        margin-bottom: 4px !important;
-        white-space: normal !important;
-        word-wrap: break-word !important;
-        word-break: break-word !important;
-        overflow: visible !important;
-        text-overflow: clip !important;
-        max-width: none !important;
-        width: 100% !important;
       }
       .pac-matched {
         font-weight: 700 !important;
         color: #2563eb !important;
       }
-      .pac-item-query + span,
-      .pac-item span:not(.pac-item-query):not(.pac-matched) {
-        font-size: 14px !important;
-        color: #6b7280 !important;
-        display: block !important;
-        line-height: 1.5 !important;
-        white-space: normal !important;
-        word-wrap: break-word !important;
-        word-break: break-word !important;
-        margin-top: 2px !important;
-        overflow: visible !important;
-        text-overflow: clip !important;
-        max-width: none !important;
-        width: 100% !important;
-      }
-      .pac-item span {
-        white-space: normal !important;
-        word-wrap: break-word !important;
-        word-break: break-word !important;
-        overflow: visible !important;
-        text-overflow: clip !important;
-        max-width: none !important;
-      }
-      .pac-icon {
-        display: none !important;
-        visibility: hidden !important;
-        width: 0 !important;
-        height: 0 !important;
-        opacity: 0 !important;
-      }
-      .pac-icon-marker {
-        display: none !important;
-      }
-      img[class*="pac-icon"] {
-        display: none !important;
-      }
-      /* Force refresh v3 */
     `
     document.head.appendChild(style)
 
-    // Watch for the pac-container to appear and hide icons dynamically
-    const observer = new MutationObserver(() => {
-      const pacContainers = document.querySelectorAll('.pac-container')
-      pacContainers.forEach(container => {
-        // Hide all icon elements
-        const icons = container.querySelectorAll('.pac-icon, .pac-icon-marker, [class*="icon"]')
-        icons.forEach(icon => {
-          if (icon instanceof HTMLElement) {
-            icon.style.display = 'none'
-            icon.style.visibility = 'hidden'
-            icon.style.width = '0'
-            icon.style.height = '0'
-          }
-        })
-      })
-    })
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-    })
-
-    // Cleanup function to remove styles when component unmounts
     return () => {
       const existingStyle = document.getElementById(styleId)
       if (existingStyle) {
         existingStyle.remove()
       }
-      observer.disconnect()
     }
   }, [])
 
@@ -408,8 +324,8 @@ export default function AdminPage() {
                 <input
                   ref={inputRef}
                   type="text"
-                  placeholder="Type venue name or address..."
-                  className="w-full border-2 border-gray-300 rounded-lg px-4 py-4 text-lg focus:border-blue-500 focus:outline-none"
+                  placeholder="Search for a venue..."
+                  className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-base focus:border-blue-500 focus:outline-none"
                   style={{ fontSize: '16px' }}
                 />
               </Autocomplete>
