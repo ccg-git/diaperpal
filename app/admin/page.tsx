@@ -72,6 +72,7 @@ export default function AdminPage() {
         z-index: 9999 !important;
         width: auto !important;
         min-width: 300px !important;
+        max-width: 600px !important;
       }
       .pac-item {
         padding: 12px 16px !important;
@@ -80,6 +81,10 @@ export default function AdminPage() {
         line-height: 1.5 !important;
         white-space: normal !important;
         word-wrap: break-word !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        height: auto !important;
+        min-height: 40px !important;
       }
       .pac-item:first-child {
         border-top: none !important;
@@ -95,6 +100,9 @@ export default function AdminPage() {
         margin-bottom: 4px !important;
         white-space: normal !important;
         word-wrap: break-word !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        max-width: 100% !important;
       }
       .pac-matched {
         font-weight: 700 !important;
@@ -108,6 +116,14 @@ export default function AdminPage() {
         white-space: normal !important;
         word-wrap: break-word !important;
         margin-top: 2px !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        max-width: 100% !important;
+      }
+      .pac-item span {
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        overflow: visible !important;
       }
     `
     document.head.appendChild(style)
