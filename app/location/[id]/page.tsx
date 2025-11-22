@@ -170,7 +170,7 @@ export default async function LocationDetailPage(props: { params: { id: string }
           )}
 
           {/* Action Buttons */}
-          <div className="flex gap-3 mt-4">
+          <div className="flex gap-6 mt-4">
             {placeDetails?.website && (
               <a
                 href={placeDetails.website}
