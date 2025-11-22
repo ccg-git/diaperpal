@@ -30,7 +30,7 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [genderFilter, setGenderFilter] = useState<'all' | 'mens' | 'womens'>('all')
-  const [venueTypeFilter, setVenueTypeFilter] = useState<string>('all')
+  const [selectedVenueTypes, setSelectedVenueTypes] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -68,13 +68,24 @@ export default function MapPage() {
   }
 
   const venueTypes = [
-    { value: 'all', label: 'All', emoji: '📍' },
     { value: 'food_drink', label: 'Food & Drink', emoji: '☕' },
     { value: 'shopping', label: 'Shopping', emoji: '🛍️' },
     { value: 'parks_outdoors', label: 'Parks', emoji: '🌳' },
     { value: 'family_attractions', label: 'Family', emoji: '🎨' },
     { value: 'errands', label: 'Errands', emoji: '📋' },
   ]
+
+  function toggleVenueType(type: string) {
+    setSelectedVenueTypes(prev => {
+      const next = new Set(prev)
+      if (next.has(type)) {
+        next.delete(type)
+      } else {
+        next.add(type)
+      }
+      return next
+    })
+  }
 
   function getVenueTypeEmoji(type: string) {
     switch (type) {
@@ -137,8 +148,8 @@ export default function MapPage() {
 
   // Filter stations based on gender and venue type filters
   const filteredStations = stations.filter(station => {
-    // Venue type filter
-    if (venueTypeFilter !== 'all' && station.venue_type !== venueTypeFilter) {
+    // Venue type filter (empty set = show all)
+    if (selectedVenueTypes.size > 0 && !selectedVenueTypes.has(station.venue_type)) {
       return false
     }
     // Gender filter
@@ -179,51 +190,67 @@ export default function MapPage() {
       <div className="max-w-2xl mx-auto p-4">
         {/* Filters */}
         {!loading && !error && stations.length > 0 && (
-          <div className="mb-4 space-y-3">
-            {/* Venue Type Filter */}
-            <div>
-              <p className="text-sm text-gray-600 mb-2">Filter by venue type:</p>
-              <div className="flex gap-2 flex-wrap">
-                {venueTypes.map((type) => (
-                  <button
-                    key={type.value}
-                    onClick={() => setVenueTypeFilter(venueTypeFilter === type.value ? 'all' : type.value)}
-                    className={`py-2 px-3 rounded-lg font-semibold transition text-sm ${
-                      venueTypeFilter === type.value
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-500'
-                    }`}
-                  >
-                    {type.emoji} {type.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Gender Filter */}
+          <div className="mb-4 space-y-4">
+            {/* Gender Filter - First */}
             <div>
               <p className="text-sm text-gray-600 mb-2">Filter by restroom:</p>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setGenderFilter(genderFilter === 'mens' ? 'all' : 'mens')}
+                  onClick={() => setGenderFilter('all')}
+                  className={`flex-1 py-3 px-4 rounded-lg font-semibold transition text-base ${
+                    genderFilter === 'all'
+                      ? 'bg-gray-700 text-white'
+                      : 'bg-white border-2 border-gray-300 text-gray-600 hover:border-gray-400'
+                  }`}
+                >
+                  All ({stations.length})
+                </button>
+                <button
+                  onClick={() => setGenderFilter('mens')}
                   className={`flex-1 py-3 px-4 rounded-lg font-semibold transition text-base ${
                     genderFilter === 'mens'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-white border-2 border-blue-500 text-blue-500'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white border-2 border-blue-400 text-blue-600 hover:border-blue-500'
                   }`}
                 >
                   👨 Men's ({countVenuesWithGender('mens')})
                 </button>
                 <button
-                  onClick={() => setGenderFilter(genderFilter === 'womens' ? 'all' : 'womens')}
+                  onClick={() => setGenderFilter('womens')}
                   className={`flex-1 py-3 px-4 rounded-lg font-semibold transition text-base ${
                     genderFilter === 'womens'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-white border-2 border-blue-500 text-blue-500'
+                      ? 'bg-pink-600 text-white'
+                      : 'bg-white border-2 border-pink-400 text-pink-600 hover:border-pink-500'
                   }`}
                 >
                   👩 Women's ({countVenuesWithGender('womens')})
                 </button>
+              </div>
+            </div>
+
+            {/* Venue Type Filter - Multi-select */}
+            <div>
+              <p className="text-sm text-gray-600 mb-2">
+                Filter by venue type: {selectedVenueTypes.size === 0 ? '(showing all)' : `(${selectedVenueTypes.size} selected)`}
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                {venueTypes.map((type) => {
+                  const isSelected = selectedVenueTypes.has(type.value)
+                  return (
+                    <button
+                      key={type.value}
+                      onClick={() => toggleVenueType(type.value)}
+                      className={`py-2 px-3 rounded-lg font-semibold transition text-sm flex items-center gap-1 ${
+                        isSelected
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-400'
+                      }`}
+                    >
+                      {isSelected && <span>✓</span>}
+                      {type.emoji} {type.label}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>
