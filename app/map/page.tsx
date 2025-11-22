@@ -30,6 +30,7 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [genderFilter, setGenderFilter] = useState<'all' | 'mens' | 'womens'>('all')
+  const [venueTypeFilter, setVenueTypeFilter] = useState<string>('all')
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -65,6 +66,15 @@ export default function MapPage() {
       setLoading(false)
     }
   }
+
+  const venueTypes = [
+    { value: 'all', label: 'All', emoji: '📍' },
+    { value: 'food_drink', label: 'Food & Drink', emoji: '☕' },
+    { value: 'shopping', label: 'Shopping', emoji: '🛍️' },
+    { value: 'parks_outdoors', label: 'Parks', emoji: '🌳' },
+    { value: 'family_attractions', label: 'Family', emoji: '🎨' },
+    { value: 'errands', label: 'Errands', emoji: '📋' },
+  ]
 
   function getVenueTypeEmoji(type: string) {
     switch (type) {
@@ -125,12 +135,18 @@ export default function MapPage() {
     ).length
   }
 
-  // Filter stations based on gender filter
-  const filteredStations = genderFilter === 'all'
-    ? stations
-    : stations.filter(station =>
-        station.facilities.some(f => f.gender === genderFilter || f.gender === 'all_gender')
-      )
+  // Filter stations based on gender and venue type filters
+  const filteredStations = stations.filter(station => {
+    // Venue type filter
+    if (venueTypeFilter !== 'all' && station.venue_type !== venueTypeFilter) {
+      return false
+    }
+    // Gender filter
+    if (genderFilter !== 'all') {
+      return station.facilities.some(f => f.gender === genderFilter || f.gender === 'all_gender')
+    }
+    return true
+  })
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -161,31 +177,54 @@ export default function MapPage() {
       </div>
 
       <div className="max-w-2xl mx-auto p-4">
-        {/* Gender Filter */}
+        {/* Filters */}
         {!loading && !error && stations.length > 0 && (
-          <div className="mb-4">
-            <p className="text-sm text-gray-600 mb-2">Filter by restroom:</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setGenderFilter(genderFilter === 'mens' ? 'all' : 'mens')}
-                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition text-base ${
-                  genderFilter === 'mens'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-white border-2 border-blue-500 text-blue-500'
-                }`}
-              >
-                👨 Men's ({countVenuesWithGender('mens')})
-              </button>
-              <button
-                onClick={() => setGenderFilter(genderFilter === 'womens' ? 'all' : 'womens')}
-                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition text-base ${
-                  genderFilter === 'womens'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-white border-2 border-blue-500 text-blue-500'
-                }`}
-              >
-                👩 Women's ({countVenuesWithGender('womens')})
-              </button>
+          <div className="mb-4 space-y-3">
+            {/* Venue Type Filter */}
+            <div>
+              <p className="text-sm text-gray-600 mb-2">Filter by venue type:</p>
+              <div className="flex gap-2 flex-wrap">
+                {venueTypes.map((type) => (
+                  <button
+                    key={type.value}
+                    onClick={() => setVenueTypeFilter(venueTypeFilter === type.value ? 'all' : type.value)}
+                    className={`py-2 px-3 rounded-lg font-semibold transition text-sm ${
+                      venueTypeFilter === type.value
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-500'
+                    }`}
+                  >
+                    {type.emoji} {type.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Gender Filter */}
+            <div>
+              <p className="text-sm text-gray-600 mb-2">Filter by restroom:</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setGenderFilter(genderFilter === 'mens' ? 'all' : 'mens')}
+                  className={`flex-1 py-3 px-4 rounded-lg font-semibold transition text-base ${
+                    genderFilter === 'mens'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-white border-2 border-blue-500 text-blue-500'
+                  }`}
+                >
+                  👨 Men's ({countVenuesWithGender('mens')})
+                </button>
+                <button
+                  onClick={() => setGenderFilter(genderFilter === 'womens' ? 'all' : 'womens')}
+                  className={`flex-1 py-3 px-4 rounded-lg font-semibold transition text-base ${
+                    genderFilter === 'womens'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-white border-2 border-blue-500 text-blue-500'
+                  }`}
+                >
+                  👩 Women's ({countVenuesWithGender('womens')})
+                </button>
+              </div>
             </div>
           </div>
         )}

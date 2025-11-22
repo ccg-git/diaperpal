@@ -2,7 +2,10 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 
 async function getLocationDetails(id: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+  // Use absolute URL for server-side fetching
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+    || `http://localhost:${process.env.PORT || 3000}`
 
   try {
     const res = await fetch(`${baseUrl}/api/locations/${id}`, {
@@ -21,7 +24,9 @@ async function getLocationDetails(id: string) {
 }
 
 async function getPlaceDetails(placeId: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+    || `http://localhost:${process.env.PORT || 3000}`
 
   try {
     const res = await fetch(`${baseUrl}/api/places/${placeId}`, {
