@@ -118,8 +118,8 @@ export default async function LocationDetailPage(props: { params: { id: string }
     notFound()
   }
 
-  // Fetch Google Places details if we have a place_id
-  const placeDetails = location.place_id ? await getPlaceDetails(location.place_id) : null
+  // Fetch Google Places details if we have a place_id (stored as google_place_id in database)
+  const placeDetails = location.google_place_id ? await getPlaceDetails(location.google_place_id) : null
   const openStatus = placeDetails?.opening_hours ? getCurrentOpenStatus(placeDetails.opening_hours) : null
   const businessCategory = placeDetails?.types ? formatBusinessCategory(placeDetails.types) : null
 
