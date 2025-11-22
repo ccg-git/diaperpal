@@ -70,11 +70,14 @@ export default function AdminPage() {
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
         margin-top: 4px !important;
         z-index: 9999 !important;
+        min-width: 350px !important;
       }
       .pac-item {
         padding: 12px 16px !important;
         cursor: pointer !important;
         border-top: 1px solid #e5e7eb !important;
+        white-space: normal !important;
+        line-height: 1.4 !important;
       }
       .pac-item:first-child {
         border-top: none !important;
@@ -86,6 +89,10 @@ export default function AdminPage() {
         font-size: 16px !important;
         font-weight: 600 !important;
         color: #1f2937 !important;
+        white-space: normal !important;
+      }
+      .pac-item span {
+        white-space: normal !important;
       }
       .pac-matched {
         font-weight: 700 !important;
