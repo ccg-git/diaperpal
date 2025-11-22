@@ -143,65 +143,51 @@ export default async function LocationDetailPage(props: { params: { id: string }
         </Link>
 
         <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
-          <div className="flex items-start gap-3 mb-4">
-            <span className="text-4xl">{getVenueTypeEmoji(location.venue_type)}</span>
-            <div className="flex-1">
-              <h1 className="text-2xl font-bold text-gray-900 mb-1">{location.name}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">{location.name}</h1>
 
-              {/* Rating and Reviews */}
-              {placeDetails?.rating && (
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg font-semibold">{placeDetails.rating}</span>
-                  <div className="flex text-yellow-400">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <span key={i}>
-                        {i < Math.floor(placeDetails.rating) ? '⭐' : i < Math.ceil(placeDetails.rating) ? '⭐' : '☆'}
-                      </span>
-                    ))}
-                  </div>
-                  {placeDetails.user_ratings_total && (
-                    <span className="text-gray-600 text-sm">({placeDetails.user_ratings_total})</span>
-                  )}
-                </div>
-              )}
-
-              {/* Business Category and Accessibility */}
-              <div className="flex items-center gap-2 text-gray-600 text-sm mb-2">
-                {businessCategory && <span>{businessCategory}</span>}
-                {businessCategory && placeDetails?.wheelchair_accessible_entrance && <span>·</span>}
-                {placeDetails?.wheelchair_accessible_entrance && <span>♿</span>}
-                {(businessCategory || placeDetails?.wheelchair_accessible_entrance) && <span>·</span>}
-                <span>{location.address}</span>
-              </div>
-
-              {/* Open/Closed Status */}
-              {openStatus && (
-                <div className={`text-sm font-semibold ${openStatus.isOpen ? 'text-green-600' : 'text-red-600'}`}>
-                  {openStatus.text}
-                </div>
+          {/* Rating and Reviews */}
+          {placeDetails?.rating && (
+            <div className="flex items-center gap-1 mb-2">
+              <span className="font-semibold">{placeDetails.rating}</span>
+              <span className="text-yellow-500">{'★'.repeat(Math.round(placeDetails.rating))}{'☆'.repeat(5 - Math.round(placeDetails.rating))}</span>
+              {placeDetails.user_ratings_total && (
+                <span className="text-gray-500 text-sm">({placeDetails.user_ratings_total})</span>
               )}
             </div>
-          </div>
+          )}
+
+          {/* Business Category and Address */}
+          <p className="text-gray-600 text-sm mb-2">
+            {businessCategory && <>{businessCategory} · </>}
+            {location.address}
+          </p>
+
+          {/* Open/Closed Status */}
+          {openStatus && (
+            <p className={`text-sm font-semibold mb-4 ${openStatus.isOpen ? 'text-green-600' : 'text-red-600'}`}>
+              {openStatus.text}
+            </p>
+          )}
 
           {/* Action Buttons */}
-          <div className="flex gap-3">
+          <div className="flex gap-3 mt-4">
             {placeDetails?.website && (
               <a
                 href={placeDetails.website}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-3 rounded-lg text-center transition flex items-center justify-center gap-2"
+                className="flex-1 border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2.5 rounded-lg text-center transition"
               >
-                🌐 Website
+                Website
               </a>
             )}
             <a
               href={`https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-lg text-center transition flex items-center justify-center gap-2"
+              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-medium py-2.5 rounded-lg text-center transition"
             >
-              📍 Directions
+              Directions
             </a>
           </div>
         </div>
