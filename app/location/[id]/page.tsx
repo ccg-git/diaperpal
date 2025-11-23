@@ -1,14 +1,51 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import {
+  VENUE_TYPE_CONFIG,
+  GENDER_CONFIG,
+  STATION_LOCATION_CONFIG,
+  STATUS_CONFIG,
+  VenueType,
+  Gender,
+  StationLocation,
+  VerificationStatus,
+} from '@/lib/types'
+import { formatTime } from '@/lib/utils'
 
-async function getLocationDetails(id: string) {
-  // Use absolute URL for server-side fetching
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-    || `http://localhost:${process.env.PORT || 3000}`
+interface Restroom {
+  id: string
+  gender: Gender
+  station_location: StationLocation
+  restroom_location_text: string | null
+  status: VerificationStatus
+  verified_at: string | null
+  photos: { id: string; image_url: string; is_primary: boolean }[]
+}
+
+interface VenueDetail {
+  id: string
+  name: string
+  address: string
+  lat: number
+  lng: number
+  venue_type: VenueType
+  hours_json: Record<string, { open: string; close: string }> | null
+  rating: number | null
+  review_count: number | null
+  photo_urls: string[] | null
+  is_open: boolean
+  hours_today: { open: string; close: string } | null
+  restrooms: Restroom[]
+}
+
+async function getVenueDetails(id: string): Promise<VenueDetail | null> {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+    `http://localhost:${process.env.PORT || 3000}`
 
   try {
-    const res = await fetch(`${baseUrl}/api/locations/${id}`, {
+    const res = await fetch(`${baseUrl}/api/venues/${id}`, {
       cache: 'no-store',
     })
 
@@ -18,219 +55,235 @@ async function getLocationDetails(id: string) {
 
     return res.json()
   } catch (error) {
-    console.error('Error fetching location:', error)
+    console.error('Error fetching venue:', error)
     return null
   }
 }
 
-async function getPlaceDetails(placeId: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-    || `http://localhost:${process.env.PORT || 3000}`
+// Track direction click (server action)
+async function trackDirectionClick(venueId: string) {
+  'use server'
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+    `http://localhost:${process.env.PORT || 3000}`
 
   try {
-    const res = await fetch(`${baseUrl}/api/places/${placeId}`, {
-      cache: 'no-store',
+    await fetch(`${baseUrl}/api/direction-click`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ venue_id: venueId }),
     })
-
-    if (!res.ok) {
-      return null
-    }
-
-    return res.json()
   } catch (error) {
-    console.error('Error fetching place details:', error)
-    return null
+    console.error('Error tracking click:', error)
   }
 }
 
-function getCurrentOpenStatus(opening_hours: any) {
-  if (!opening_hours) return null
+export default async function LocationDetailPage({
+  params,
+}: {
+  params: { id: string }
+}) {
+  const venue = await getVenueDetails(params.id)
 
-  const isOpen = opening_hours.open_now
-
-  if (!opening_hours.periods || opening_hours.periods.length === 0) {
-    return { isOpen, text: isOpen ? 'Open' : 'Closed' }
-  }
-
-  // Get current day and time
-  const now = new Date()
-  const currentDay = now.getDay() // 0 = Sunday, 6 = Saturday
-  const currentTime = now.getHours() * 100 + now.getMinutes()
-
-  // Find today's hours
-  const todayPeriod = opening_hours.periods.find((p: any) => p.open?.day === currentDay)
-
-  if (todayPeriod && todayPeriod.close) {
-    const closeTime = todayPeriod.close.time
-    const closeHour = Math.floor(parseInt(closeTime) / 100)
-    const closeMin = parseInt(closeTime) % 100
-    const closeFormatted = `${closeHour > 12 ? closeHour - 12 : closeHour}:${closeMin.toString().padStart(2, '0')} ${closeHour >= 12 ? 'PM' : 'AM'}`
-
-    return {
-      isOpen,
-      text: isOpen ? `Open · Closes ${closeFormatted}` : `Closed · Opens ${closeFormatted}`
-    }
-  }
-
-  return { isOpen, text: isOpen ? 'Open' : 'Closed' }
-}
-
-function formatBusinessCategory(types: string[]) {
-  if (!types || types.length === 0) return null
-
-  // Filter out generic types and get the most specific one
-  const exclude = ['point_of_interest', 'establishment', 'food', 'store']
-  const filtered = types.filter(t => !exclude.includes(t))
-
-  if (filtered.length === 0) return null
-
-  // Format the type (e.g., "coffee_shop" -> "Coffee shop")
-  return filtered[0].replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-}
-
-function getVenueTypeEmoji(type: string) {
-  switch (type) {
-    case 'food_drink': return '☕'
-    case 'shopping': return '🛍️'
-    case 'parks_outdoors': return '🌳'
-    case 'family_attractions': return '🎨'
-    case 'errands': return '📋'
-    default: return '📍'
-  }
-}
-
-function getPrivacyLevel(facility: any) {
-  if (facility.privacy_type === 'private') return '🔒🔒🔒 High Privacy'
-  if (facility.privacy_type === 'multi_stall' && facility.station_location === 'accessible_stall') return '🔒🔒 Medium Privacy'
-  return '🔒 Low Privacy'
-}
-
-function getGenderLabel(gender: string) {
-  switch (gender) {
-    case 'mens': return '👨 Men\'s Restroom'
-    case 'womens': return '👩 Women\'s Restroom'
-    case 'all_gender': return '🚻 All-Gender Restroom'
-    default: return gender
-  }
-}
-
-export default async function LocationDetailPage(props: { params: { id: string } }) {
-  const params = await Promise.resolve(props.params)
-  const location = await getLocationDetails(params.id)
-
-  if (!location) {
+  if (!venue) {
     notFound()
   }
 
-  // Fetch Google Places details if we have a place_id (stored as google_place_id in database)
-  const placeDetails = location.google_place_id ? await getPlaceDetails(location.google_place_id) : null
-  const openStatus = placeDetails?.opening_hours ? getCurrentOpenStatus(placeDetails.opening_hours) : null
-  const businessCategory = placeDetails?.types ? formatBusinessCategory(placeDetails.types) : null
+  const verifiedRestrooms = venue.restrooms.filter((r) => r.status === 'verified_present')
+  const unverifiedRestrooms = venue.restrooms.filter((r) => r.status === 'unverified')
 
-  const verifiedFacilities = (location.facilities || []).filter(
-    (f: any) => f.verification_status === 'verified_present'
-  )
-
-  const unverifiedFacilities = (location.facilities || []).filter(
-    (f: any) => f.verification_status === 'unverified'
-  )
-
-  const absentFacilities = (location.facilities || []).filter(
-    (f: any) => f.verification_status === 'verified_absent'
-  )
+  // Get directions URL
+  const isIOS = false // Can't detect on server, default to Google Maps
+  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}`
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto p-4">
-        <Link href="/map" className="inline-block mb-4 text-blue-600 hover:text-blue-700 font-semibold">
-          ← Back to List
-        </Link>
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3">
+        <div className="max-w-2xl mx-auto flex items-center">
+          <Link
+            href="/map"
+            className="text-teal-600 hover:text-teal-700 font-semibold flex items-center gap-1"
+          >
+            ← Back
+          </Link>
+        </div>
+      </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">{location.name}</h1>
+      <div className="max-w-2xl mx-auto">
+        {/* Venue Header */}
+        <div className="bg-white p-6 border-b border-gray-200">
+          <div className="flex items-start gap-3">
+            <span className="text-3xl">
+              {VENUE_TYPE_CONFIG[venue.venue_type]?.emoji || '📍'}
+            </span>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl font-bold text-gray-900">{venue.name}</h1>
+              <p className="text-gray-600 mt-1">{venue.address}</p>
 
-          {/* Rating and Reviews */}
-          {placeDetails?.rating && (
-            <div className="flex items-center gap-1 mb-2">
-              <span className="font-semibold">{placeDetails.rating}</span>
-              <span className="text-yellow-500">{'★'.repeat(Math.round(placeDetails.rating))}{'☆'.repeat(5 - Math.round(placeDetails.rating))}</span>
-              {placeDetails.user_ratings_total && (
-                <span className="text-gray-500 text-sm">({placeDetails.user_ratings_total})</span>
+              {/* Rating */}
+              {venue.rating && (
+                <div className="flex items-center gap-1.5 mt-2">
+                  <span className="text-amber-500 text-lg">★</span>
+                  <span className="font-semibold">{venue.rating}</span>
+                  {venue.review_count && (
+                    <span className="text-gray-500 text-sm">
+                      ({venue.review_count} reviews)
+                    </span>
+                  )}
+                </div>
               )}
+
+              {/* Open Status */}
+              <div className="mt-2">
+                {venue.is_open ? (
+                  <span className="inline-flex items-center gap-1.5 text-green-600 font-medium">
+                    <span className="w-2 h-2 bg-green-500 rounded-full" />
+                    Open
+                    {venue.hours_today && (
+                      <span className="text-gray-500 font-normal">
+                        · Closes {formatTime(venue.hours_today.close)}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-red-500 font-medium">
+                    <span className="w-2 h-2 bg-red-500 rounded-full" />
+                    Closed
+                    {venue.hours_today && (
+                      <span className="text-gray-500 font-normal">
+                        · Opens {formatTime(venue.hours_today.open)}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Get Directions Button */}
+          <a
+            href={directionsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block w-full mt-6 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3.5 rounded-lg text-center transition"
+          >
+            Get Directions
+          </a>
+        </div>
+
+        {/* Restrooms Section */}
+        <div className="p-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">
+            Changing Stations ({venue.restrooms.length})
+          </h2>
+
+          {/* Verified Restrooms */}
+          {verifiedRestrooms.length > 0 && (
+            <div className="space-y-3 mb-6">
+              {verifiedRestrooms.map((restroom) => (
+                <div
+                  key={restroom.id}
+                  className="bg-white rounded-xl border border-gray-200 p-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-green-600 text-xl">
+                      {STATUS_CONFIG.verified_present.emoji}
+                    </span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">
+                          {GENDER_CONFIG[restroom.gender].emoji}
+                        </span>
+                        <span className="font-semibold text-gray-900">
+                          {GENDER_CONFIG[restroom.gender].label}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 space-y-1 text-sm text-gray-600">
+                        <div className="flex items-center gap-2">
+                          <span>{STATION_LOCATION_CONFIG[restroom.station_location].emoji}</span>
+                          <span>{STATION_LOCATION_CONFIG[restroom.station_location].label}</span>
+                          <span className="text-gray-400">-</span>
+                          <span className="text-gray-500">
+                            {STATION_LOCATION_CONFIG[restroom.station_location].description}
+                          </span>
+                        </div>
+
+                        {restroom.restroom_location_text && (
+                          <p className="text-gray-500 mt-1">
+                            📍 {restroom.restroom_location_text}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Photos */}
+                      {restroom.photos && restroom.photos.length > 0 && (
+                        <div className="mt-3 flex gap-2 overflow-x-auto">
+                          {restroom.photos.map((photo) => (
+                            <img
+                              key={photo.id}
+                              src={photo.image_url}
+                              alt="Restroom"
+                              className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
-          {/* Business Category and Address */}
-          <p className="text-gray-600 text-sm mb-2">
-            {businessCategory && <>{businessCategory} · </>}
-            {location.address}
-          </p>
-
-          {/* Open/Closed Status */}
-          {openStatus && (
-            <p className={`text-sm font-semibold mb-4 ${openStatus.isOpen ? 'text-green-600' : 'text-red-600'}`}>
-              {openStatus.text}
-            </p>
+          {/* Unverified Restrooms */}
+          {unverifiedRestrooms.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                Unverified
+              </h3>
+              {unverifiedRestrooms.map((restroom) => (
+                <div
+                  key={restroom.id}
+                  className="bg-gray-50 rounded-xl border border-gray-200 p-4"
+                >
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <span>{STATUS_CONFIG.unverified.emoji}</span>
+                    <span>{GENDER_CONFIG[restroom.gender].emoji}</span>
+                    <span>{GENDER_CONFIG[restroom.gender].label}</span>
+                    <span className="text-gray-400">•</span>
+                    <span className="text-gray-500">Needs verification</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex gap-6 mt-4">
-            {placeDetails?.website && (
-              <a
-                href={placeDetails.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2.5 rounded-lg text-center transition"
-              >
-                Website
-              </a>
-            )}
-            <a
-              href={`https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-medium py-2.5 rounded-lg text-center transition"
-            >
-              Directions
-            </a>
-          </div>
+          {/* No restrooms */}
+          {venue.restrooms.length === 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-800 text-center">
+              No changing station data available yet.
+            </div>
+          )}
         </div>
 
-        {verifiedFacilities.length > 0 && (
-          <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              ✅ Verified Changing Stations
-            </h2>
-
-            {verifiedFacilities.map((facility: any) => (
-              <div key={facility.id} className="border-b border-gray-200 last:border-0 pb-4 mb-4 last:mb-0">
-                <h3 className="font-bold text-lg mb-2">{getGenderLabel(facility.gender)}</h3>
-                <div className="space-y-2 text-sm">
-                  <div><span className="font-semibold">Privacy:</span> {getPrivacyLevel(facility)}</div>
-                  {facility.station_location && (
-                    <div><span className="font-semibold">Location:</span> {facility.station_location === 'open_wall' ? 'Open wall' : 'Inside accessible stall'}</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {unverifiedFacilities.length > 0 && (
-          <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">❓ Unverified Restrooms</h2>
-            {unverifiedFacilities.map((facility: any) => (
-              <div key={facility.id} className="text-sm text-gray-700 mb-2">
-                • {getGenderLabel(facility.gender)}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {verifiedFacilities.length === 0 && unverifiedFacilities.length === 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800">
-            No restroom data available yet.
+        {/* Venue Photos */}
+        {venue.photo_urls && venue.photo_urls.length > 0 && (
+          <div className="p-6 pt-0">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Photos</h2>
+            <div className="grid grid-cols-2 gap-2">
+              {venue.photo_urls.slice(0, 4).map((url, index) => (
+                <img
+                  key={index}
+                  src={url}
+                  alt={`${venue.name} photo ${index + 1}`}
+                  className="w-full h-32 object-cover rounded-lg"
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>

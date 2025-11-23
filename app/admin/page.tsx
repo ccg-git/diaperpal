@@ -1,628 +1,610 @@
 'use client'
-import { useState, useRef, useCallback, useEffect } from 'react'
+
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useJsApiLoader, Autocomplete } from '@react-google-maps/api'
+import {
+  VenueType,
+  Gender,
+  StationLocation,
+  VerificationStatus,
+  VENUE_TYPE_CONFIG,
+  GENDER_CONFIG,
+  STATION_LOCATION_CONFIG,
+} from '@/lib/types'
 
-const libraries: ("places")[] = ["places"]
+const libraries: ('places')[] = ['places']
 
-interface Restroom {
+interface RestroomForm {
+  gender: Gender
+  station_location: StationLocation
+  restroom_location_text: string
+  status: VerificationStatus
+}
+
+interface CreatedRestroom extends RestroomForm {
   id: string
-  privacy_type: 'private' | 'multi_stall' | ''
-  gender: 'mens' | 'womens' | 'all_gender' | ''
-  location_in_venue: string
-  station_status: 'verified_present' | 'verified_absent' | 'unverified' | ''
-  station_location: 'open_wall' | 'accessible_stall' | ''
-  safety_concern: boolean
-  cleanliness_issue: boolean
-  issue_notes: string
-  additional_notes: string
-  photo: File | null
 }
 
 export default function AdminPage() {
-  const { isLoaded } = useJsApiLoader({
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [password, setPassword] = useState('')
+  const [authError, setAuthError] = useState('')
+
+  // Step tracking
+  const [step, setStep] = useState<'venue' | 'restrooms'>('venue')
+
+  // Venue state
+  const [selectedPlace, setSelectedPlace] = useState<google.maps.places.PlaceResult | null>(null)
+  const [venueType, setVenueType] = useState<VenueType>('food_drink')
+  const [venueId, setVenueId] = useState<string | null>(null)
+  const [venueName, setVenueName] = useState('')
+  const [venueLoading, setVenueLoading] = useState(false)
+  const [venueError, setVenueError] = useState('')
+
+  // Restroom state
+  const [restrooms, setRestrooms] = useState<CreatedRestroom[]>([])
+  const [restroomForm, setRestroomForm] = useState<RestroomForm>({
+    gender: 'mens',
+    station_location: 'single_restroom',
+    restroom_location_text: '',
+    status: 'verified_present',
+  })
+  const [restroomLoading, setRestroomLoading] = useState(false)
+  const [restroomError, setRestroomError] = useState('')
+
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
     libraries,
   })
 
-  const [venueData, setVenueData] = useState({
-    name: '',
-    address: '',
-    lat: null as number | null,
-    lng: null as number | null,
-    place_id: '',
-    venue_type: 'food_drink',
-  })
-
-  const [restrooms, setRestrooms] = useState<Restroom[]>([
-    {
-      id: '1',
-      privacy_type: '',
-      gender: '',
-      location_in_venue: '',
-      station_status: '',
-      station_location: '',
-      safety_concern: false,
-      cleanliness_issue: false,
-      issue_notes: '',
-      additional_notes: '',
-      photo: null,
-    },
-  ])
-
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState('')
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
-  const inputRef = useRef<HTMLInputElement | null>(null)
-
-  // Add custom styles for Google Autocomplete dropdown
+  // Check if already authenticated (cookie)
   useEffect(() => {
-    const styleId = 'google-autocomplete-styles'
+    const storedPassword = document.cookie
+      .split('; ')
+      .find((row) => row.startsWith('admin_password='))
+      ?.split('=')[1]
 
-    if (document.getElementById(styleId)) return
-
-    const style = document.createElement('style')
-    style.id = styleId
-    style.innerHTML = `
-      .pac-container {
-        font-family: inherit !important;
-        font-size: 16px !important;
-        border-radius: 8px !important;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
-        margin-top: 4px !important;
-        z-index: 9999 !important;
-        min-width: 350px !important;
-      }
-      .pac-item {
-        padding: 12px 16px !important;
-        cursor: pointer !important;
-        border-top: 1px solid #e5e7eb !important;
-        white-space: normal !important;
-        line-height: 1.4 !important;
-      }
-      .pac-item:first-child {
-        border-top: none !important;
-      }
-      .pac-item:hover {
-        background-color: #f3f4f6 !important;
-      }
-      .pac-item-query {
-        font-size: 16px !important;
-        font-weight: 600 !important;
-        color: #1f2937 !important;
-        white-space: normal !important;
-      }
-      .pac-item span {
-        white-space: normal !important;
-      }
-      .pac-matched {
-        font-weight: 700 !important;
-        color: #2563eb !important;
-      }
-    `
-    document.head.appendChild(style)
-
-    return () => {
-      const existingStyle = document.getElementById(styleId)
-      if (existingStyle) {
-        existingStyle.remove()
-      }
+    if (storedPassword) {
+      setPassword(storedPassword)
+      setIsAuthenticated(true)
     }
   }, [])
+
+  function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    // Store password in cookie for API calls
+    document.cookie = `admin_password=${password}; path=/; max-age=86400` // 24 hours
+    setIsAuthenticated(true)
+    setAuthError('')
+  }
+
+  function handleLogout() {
+    document.cookie = 'admin_password=; path=/; max-age=0'
+    setIsAuthenticated(false)
+    setPassword('')
+    resetForm()
+  }
+
+  function resetForm() {
+    setStep('venue')
+    setSelectedPlace(null)
+    setVenueType('food_drink')
+    setVenueId(null)
+    setVenueName('')
+    setRestrooms([])
+    setRestroomForm({
+      gender: 'mens',
+      station_location: 'single_restroom',
+      restroom_location_text: '',
+      status: 'verified_present',
+    })
+    if (inputRef.current) {
+      inputRef.current.value = ''
+    }
+  }
 
   const onLoad = useCallback((autocomplete: google.maps.places.Autocomplete) => {
     autocompleteRef.current = autocomplete
   }, [])
 
   const onPlaceChanged = useCallback(() => {
-    if (autocompleteRef.current) {
-      const place = autocompleteRef.current.getPlace()
-
-      if (place.geometry?.location && place.place_id) {
-        setVenueData(prev => ({
-          ...prev,
-          name: place.name || '',
-          address: place.formatted_address || '',
-          lat: place.geometry!.location!.lat(),
-          lng: place.geometry!.location!.lng(),
-          place_id: place.place_id,
-        }))
-        setMessage('✅ Venue selected!')
-        setTimeout(() => setMessage(''), 2000)
-
-        // Clear the input field after selection since we show the info in the green box
-        if (inputRef.current) {
-          inputRef.current.value = ''
-        }
+    const place = autocompleteRef.current?.getPlace()
+    if (place && place.place_id) {
+      setSelectedPlace(place)
+      setVenueError('')
+      // Clear input after selection
+      if (inputRef.current) {
+        inputRef.current.value = ''
       }
     }
   }, [])
 
-  function handleVenueChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const { name, value } = e.target
-    setVenueData(prev => ({ ...prev, [name]: value }))
-  }
-
-  function handleRestroomChange(id: string, field: string, value: any) {
-    setRestrooms(prev =>
-      prev.map(r => (r.id === id ? { ...r, [field]: value } : r))
-    )
-  }
-
-  function addRestroom() {
-    const newId = (restrooms.length + 1).toString()
-    setRestrooms(prev => [
-      ...prev,
-      {
-        id: newId,
-        privacy_type: '',
-        gender: '',
-        location_in_venue: '',
-        station_status: '',
-        station_location: '',
-        safety_concern: false,
-        cleanliness_issue: false,
-        issue_notes: '',
-        additional_notes: '',
-        photo: null,
-      },
-    ])
-  }
-
-  function removeRestroom(id: string) {
-    if (restrooms.length > 1) {
-      setRestrooms(prev => prev.filter(r => r.id !== id))
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleCreateVenue(e: React.FormEvent) {
     e.preventDefault()
 
-    if (!venueData.lat || !venueData.lng) {
-      setMessage('❌ Please select a venue from the dropdown')
+    if (!selectedPlace?.place_id) {
+      setVenueError('Please select a venue from the autocomplete')
       return
     }
 
-    if (!venueData.name || !venueData.address) {
-      setMessage('❌ Venue information incomplete')
-      return
-    }
-
-    const validRestrooms = restrooms.filter(r => r.privacy_type && r.gender && r.station_status)
-    if (validRestrooms.length === 0) {
-      setMessage('❌ Please fill in at least one restroom')
-      return
-    }
-
-    setLoading(true)
+    setVenueLoading(true)
+    setVenueError('')
 
     try {
-      const venueResponse = await fetch('/api/venues', {
+      const res = await fetch('/api/admin/venues', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${password}`,
+        },
         body: JSON.stringify({
-          name: venueData.name,
-          address: venueData.address,
-          lat: venueData.lat,
-          lng: venueData.lng,
-          place_id: venueData.place_id,
-          venue_type: venueData.venue_type,
+          place_id: selectedPlace.place_id,
+          venue_type: venueType,
         }),
       })
 
-      if (!venueResponse.ok) {
-        throw new Error('Failed to create venue')
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create venue')
       }
 
-      const { venue_id } = await venueResponse.json()
-
-      for (const restroom of validRestrooms) {
-        const facilityResponse = await fetch('/api/facilities', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            venue_id,
-            privacy_type: restroom.privacy_type,
-            gender: restroom.gender,
-            location_in_venue: restroom.location_in_venue,
-            station_status: restroom.station_status,
-            station_location: restroom.station_location,
-            safety_concern: restroom.safety_concern,
-            cleanliness_issue: restroom.cleanliness_issue,
-            issue_notes: restroom.issue_notes,
-            additional_notes: restroom.additional_notes,
-          }),
-        })
-
-        if (!facilityResponse.ok) {
-          console.error('Failed to create facility:', await facilityResponse.text())
-          continue
-        }
-
-        const { facility_id } = await facilityResponse.json()
-
-        if (restroom.photo) {
-          const formData = new FormData()
-          formData.append('file', restroom.photo)
-          formData.append('facility_id', facility_id)
-          formData.append('photo_type', 'station_view')
-          formData.append('file_name', `${facility_id}_${Date.now()}.${restroom.photo.name.split('.').pop()}`)
-
-          await fetch('/api/photos', {
-            method: 'POST',
-            body: formData,
-          })
-        }
-      }
-
-      setMessage('🎉 Success! Venue and restrooms added!')
-
-      setVenueData({
-        name: '',
-        address: '',
-        lat: null,
-        lng: null,
-        place_id: '',
-        venue_type: 'food_drink',
-      })
-      setRestrooms([
-        {
-          id: '1',
-          privacy_type: '',
-          gender: '',
-          location_in_venue: '',
-          station_status: '',
-          station_location: '',
-          safety_concern: false,
-          cleanliness_issue: false,
-          issue_notes: '',
-          additional_notes: '',
-          photo: null,
-        },
-      ])
+      setVenueId(data.venue_id)
+      setVenueName(data.name)
+      setStep('restrooms')
     } catch (error) {
-      console.error('Submit error:', error)
-      setMessage('❌ Failed to submit. Check console for errors.')
+      setVenueError(error instanceof Error ? error.message : 'Failed to create venue')
     } finally {
-      setLoading(false)
+      setVenueLoading(false)
     }
+  }
+
+  async function handleAddRestroom(e: React.FormEvent) {
+    e.preventDefault()
+
+    if (!venueId) return
+
+    setRestroomLoading(true)
+    setRestroomError('')
+
+    try {
+      const res = await fetch('/api/admin/restrooms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${password}`,
+        },
+        body: JSON.stringify({
+          venue_id: venueId,
+          ...restroomForm,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create restroom')
+      }
+
+      // Add to list
+      setRestrooms((prev) => [
+        ...prev,
+        { ...restroomForm, id: data.restroom_id },
+      ])
+
+      // Reset form for next restroom
+      setRestroomForm({
+        gender: 'mens',
+        station_location: 'single_restroom',
+        restroom_location_text: '',
+        status: 'verified_present',
+      })
+    } catch (error) {
+      setRestroomError(error instanceof Error ? error.message : 'Failed to add restroom')
+    } finally {
+      setRestroomLoading(false)
+    }
+  }
+
+  // Login screen
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
+          <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+            Admin Login
+          </h1>
+          <form onSubmit={handleLogin}>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter admin password"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+              autoFocus
+            />
+            {authError && (
+              <p className="text-red-500 text-sm mt-2">{authError}</p>
+            )}
+            <button
+              type="submit"
+              className="w-full mt-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-lg transition"
+            >
+              Login
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
+            Error loading Google Maps. Please check your API key.
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (!isLoaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-600">Loading Google Maps...</p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-600">Loading...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6">
-        <h1 className="text-2xl font-bold text-blue-600 mb-2">Quick Data Capture</h1>
-        <p className="text-gray-600 text-sm mb-6">Add venue + restrooms in the wild</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-4 py-4">
+        <div className="max-w-2xl mx-auto flex justify-between items-center">
+          <h1 className="text-xl font-bold text-gray-900">Admin Panel</h1>
+          <button
+            onClick={handleLogout}
+            className="text-gray-500 hover:text-gray-700 text-sm"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
 
-        {message && (
+      <div className="max-w-2xl mx-auto p-6">
+        {/* Step Indicator */}
+        <div className="flex items-center gap-4 mb-8">
           <div
-            className={`mb-4 p-3 rounded text-center font-semibold text-sm ${
-              message.includes('🎉') || message.includes('✅')
-                ? 'bg-green-50 text-green-800 border border-green-200'
-                : 'bg-red-50 text-red-800 border border-red-200'
+            className={`flex items-center gap-2 ${
+              step === 'venue' ? 'text-teal-600' : 'text-gray-400'
             }`}
           >
-            {message}
+            <span
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                step === 'venue'
+                  ? 'bg-teal-600 text-white'
+                  : venueId
+                  ? 'bg-green-500 text-white'
+                  : 'bg-gray-200'
+              }`}
+            >
+              {venueId ? '✓' : '1'}
+            </span>
+            <span className="font-medium">Venue</span>
+          </div>
+          <div className="flex-1 h-0.5 bg-gray-200" />
+          <div
+            className={`flex items-center gap-2 ${
+              step === 'restrooms' ? 'text-teal-600' : 'text-gray-400'
+            }`}
+          >
+            <span
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                step === 'restrooms' ? 'bg-teal-600 text-white' : 'bg-gray-200'
+              }`}
+            >
+              2
+            </span>
+            <span className="font-medium">Restrooms</span>
+          </div>
+        </div>
+
+        {/* Step 1: Select Venue */}
+        {step === 'venue' && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">
+              Add New Venue
+            </h2>
+
+            <form onSubmit={handleCreateVenue}>
+              {/* Google Autocomplete */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Search for venue
+                </label>
+                <Autocomplete
+                  onLoad={onLoad}
+                  onPlaceChanged={onPlaceChanged}
+                  options={{
+                    componentRestrictions: { country: 'us' },
+                    types: ['establishment'],
+                  }}
+                >
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    placeholder="Search for a venue..."
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+                  />
+                </Autocomplete>
+              </div>
+
+              {/* Selected Place Info */}
+              {selectedPlace && (
+                <div className="mb-4 p-4 bg-teal-50 border border-teal-200 rounded-lg">
+                  <p className="font-semibold text-teal-900">{selectedPlace.name}</p>
+                  <p className="text-sm text-teal-700">
+                    {selectedPlace.formatted_address}
+                  </p>
+                </div>
+              )}
+
+              {/* Venue Type */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Venue Type
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(Object.entries(VENUE_TYPE_CONFIG) as [VenueType, { emoji: string; label: string }][]).map(
+                    ([type, config]) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setVenueType(type)}
+                        className={`py-3 px-4 rounded-lg font-medium text-left transition ${
+                          venueType === type
+                            ? 'bg-teal-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {config.emoji} {config.label}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {venueError && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
+                  {venueError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={!selectedPlace || venueLoading}
+                className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg transition"
+              >
+                {venueLoading ? 'Creating...' : 'Create Venue'}
+              </button>
+            </form>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* VENUE INFO */}
-          <div className="border-b pb-4">
-            <h2 className="text-lg font-semibold mb-3">Venue Info</h2>
-
-            <div>
-              <label className="block text-sm font-semibold mb-1">Search Venue *</label>
-              <Autocomplete
-                onLoad={onLoad}
-                onPlaceChanged={onPlaceChanged}
-                options={{
-                  types: ['establishment'],
-                  componentRestrictions: { country: 'us' },
-                }}
-              >
-                <input
-                  ref={inputRef}
-                  type="text"
-                  placeholder="Search for a venue..."
-                  className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-base focus:border-blue-500 focus:outline-none"
-                  style={{ fontSize: '16px' }}
-                />
-              </Autocomplete>
-              {venueData.name && (
-                <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="font-bold text-green-800">{venueData.name}</p>
-                  <p className="text-sm text-green-700">{venueData.address}</p>
+        {/* Step 2: Add Restrooms */}
+        {step === 'restrooms' && venueId && (
+          <div className="space-y-6">
+            {/* Venue Info */}
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="font-semibold text-teal-900">{venueName}</p>
+                  <p className="text-sm text-teal-700">
+                    {VENUE_TYPE_CONFIG[venueType].emoji} {VENUE_TYPE_CONFIG[venueType].label}
+                  </p>
                 </div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold mb-1">Venue Type *</label>
-              <select
-                name="venue_type"
-                value={venueData.venue_type}
-                onChange={handleVenueChange}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-base"
-              >
-                <option value="food_drink">☕ Food & Drink</option>
-                <option value="shopping">🛍️ Shopping</option>
-                <option value="parks_outdoors">🌳 Parks & Outdoors</option>
-                <option value="family_attractions">🎨 Family Attractions</option>
-                <option value="errands">📋 Errands</option>
-              </select>
-            </div>
-          </div>
-
-          {/* RESTROOMS */}
-          {restrooms.map((restroom, index) => (
-            <div key={restroom.id} className="border-b pb-4">
-              <div className="flex justify-between items-center mb-3">
-                <h2 className="text-lg font-semibold">Restroom {index + 1}</h2>
-                {restrooms.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeRestroom(restroom.id)}
-                    className="text-red-600 text-sm font-semibold"
-                  >
-                    Remove
-                  </button>
-                )}
+                <button
+                  onClick={resetForm}
+                  className="text-teal-600 hover:text-teal-700 text-sm font-medium"
+                >
+                  + Add Another Venue
+                </button>
               </div>
+            </div>
 
-              <div className="space-y-3">
-                {/* Privacy Type */}
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Restroom Privacy *</label>
-                  <div className="flex gap-4">
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name={`privacy_${restroom.id}`}
-                        value="private"
-                        checked={restroom.privacy_type === 'private'}
-                        onChange={(e) => handleRestroomChange(restroom.id, 'privacy_type', e.target.value)}
-                        className="mr-2"
-                      />
-                      <span className="text-base">Private</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name={`privacy_${restroom.id}`}
-                        value="multi_stall"
-                        checked={restroom.privacy_type === 'multi_stall'}
-                        onChange={(e) => handleRestroomChange(restroom.id, 'privacy_type', e.target.value)}
-                        className="mr-2"
-                      />
-                      <span className="text-base">Multi-stall</span>
-                    </label>
-                  </div>
+            {/* Added Restrooms */}
+            {restrooms.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                <h3 className="font-semibold text-gray-900 mb-3">
+                  Added Restrooms ({restrooms.length})
+                </h3>
+                <div className="space-y-2">
+                  {restrooms.map((restroom) => (
+                    <div
+                      key={restroom.id}
+                      className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 rounded-lg p-3"
+                    >
+                      <span className="text-green-600">✓</span>
+                      <span>{GENDER_CONFIG[restroom.gender].emoji}</span>
+                      <span>{GENDER_CONFIG[restroom.gender].label}</span>
+                      <span className="text-gray-400">•</span>
+                      <span>{STATION_LOCATION_CONFIG[restroom.station_location].label}</span>
+                    </div>
+                  ))}
                 </div>
+              </div>
+            )}
 
+            {/* Add Restroom Form */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="font-semibold text-gray-900 mb-4">
+                Add Restroom
+              </h3>
+
+              <form onSubmit={handleAddRestroom}>
                 {/* Gender */}
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Gender *</label>
-                  <div className="flex gap-4">
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name={`gender_${restroom.id}`}
-                        value="mens"
-                        checked={restroom.gender === 'mens'}
-                        onChange={(e) => handleRestroomChange(restroom.id, 'gender', e.target.value)}
-                        className="mr-2"
-                      />
-                      <span className="text-base">Men's</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name={`gender_${restroom.id}`}
-                        value="womens"
-                        checked={restroom.gender === 'womens'}
-                        onChange={(e) => handleRestroomChange(restroom.id, 'gender', e.target.value)}
-                        className="mr-2"
-                      />
-                      <span className="text-base">Women's</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name={`gender_${restroom.id}`}
-                        value="all_gender"
-                        checked={restroom.gender === 'all_gender'}
-                        onChange={(e) => handleRestroomChange(restroom.id, 'gender', e.target.value)}
-                        className="mr-2"
-                      />
-                      <span className="text-base">All-gender</span>
-                    </label>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Gender
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(Object.entries(GENDER_CONFIG) as [Gender, { emoji: string; label: string }][]).map(
+                      ([gender, config]) => (
+                        <button
+                          key={gender}
+                          type="button"
+                          onClick={() =>
+                            setRestroomForm((prev) => ({ ...prev, gender }))
+                          }
+                          className={`py-3 px-4 rounded-lg font-medium transition ${
+                            restroomForm.gender === gender
+                              ? 'bg-teal-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {config.emoji} {config.label}
+                        </button>
+                      )
+                    )}
                   </div>
                 </div>
 
-                {/* Location in Venue */}
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Location in Venue</label>
+                {/* Station Location */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Station Location
+                  </label>
+                  <div className="space-y-2">
+                    {(
+                      Object.entries(STATION_LOCATION_CONFIG) as [
+                        StationLocation,
+                        { emoji: string; label: string; description: string }
+                      ][]
+                    ).map(([location, config]) => (
+                      <button
+                        key={location}
+                        type="button"
+                        onClick={() =>
+                          setRestroomForm((prev) => ({
+                            ...prev,
+                            station_location: location,
+                          }))
+                        }
+                        className={`w-full py-3 px-4 rounded-lg font-medium text-left transition ${
+                          restroomForm.station_location === location
+                            ? 'bg-teal-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        <span className="block">
+                          {config.emoji} {config.label}
+                        </span>
+                        <span
+                          className={`text-sm ${
+                            restroomForm.station_location === location
+                              ? 'text-teal-100'
+                              : 'text-gray-500'
+                          }`}
+                        >
+                          {config.description}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Location Text */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Location Description (optional)
+                  </label>
                   <input
                     type="text"
-                    value={restroom.location_in_venue}
-                    onChange={(e) => handleRestroomChange(restroom.id, 'location_in_venue', e.target.value)}
-                    placeholder="e.g. Front entrance, Back near electronics"
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-base"
+                    value={restroomForm.restroom_location_text}
+                    onChange={(e) =>
+                      setRestroomForm((prev) => ({
+                        ...prev,
+                        restroom_location_text: e.target.value,
+                      }))
+                    }
+                    placeholder='e.g., "Back hallway near kitchen"'
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
                   />
                 </div>
 
-                {/* Station Status */}
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Station Status *</label>
-                  <div className="space-y-2">
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name={`status_${restroom.id}`}
-                        value="verified_present"
-                        checked={restroom.station_status === 'verified_present'}
-                        onChange={(e) => handleRestroomChange(restroom.id, 'station_status', e.target.value)}
-                        className="mr-2"
-                      />
-                      <span className="text-base">Verified Present</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name={`status_${restroom.id}`}
-                        value="verified_absent"
-                        checked={restroom.station_status === 'verified_absent'}
-                        onChange={(e) => handleRestroomChange(restroom.id, 'station_status', e.target.value)}
-                        className="mr-2"
-                      />
-                      <span className="text-base">Verified Absent</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name={`status_${restroom.id}`}
-                        value="unverified"
-                        checked={restroom.station_status === 'unverified'}
-                        onChange={(e) => handleRestroomChange(restroom.id, 'station_status', e.target.value)}
-                        className="mr-2"
-                      />
-                      <span className="text-base">Unverified</span>
-                    </label>
+                {/* Status */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Verification Status
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRestroomForm((prev) => ({
+                          ...prev,
+                          status: 'verified_present',
+                        }))
+                      }
+                      className={`py-3 px-4 rounded-lg font-medium transition ${
+                        restroomForm.status === 'verified_present'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      ✅ Verified Present
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRestroomForm((prev) => ({
+                          ...prev,
+                          status: 'unverified',
+                        }))
+                      }
+                      className={`py-3 px-4 rounded-lg font-medium transition ${
+                        restroomForm.status === 'unverified'
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      ❓ Unverified
+                    </button>
                   </div>
                 </div>
 
-                {/* Station Details (only if Verified Present) */}
-                {restroom.station_status === 'verified_present' && (
-                  <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-3">
-                    <div>
-                      <label className="block text-sm font-semibold mb-1">Station Location *</label>
-                      <div className="space-y-2">
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name={`location_${restroom.id}`}
-                            value="open_wall"
-                            checked={restroom.station_location === 'open_wall'}
-                            onChange={(e) => handleRestroomChange(restroom.id, 'station_location', e.target.value)}
-                            className="mr-2"
-                          />
-                          <span className="text-base">Open wall</span>
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name={`location_${restroom.id}`}
-                            value="accessible_stall"
-                            checked={restroom.station_location === 'accessible_stall'}
-                            onChange={(e) => handleRestroomChange(restroom.id, 'station_location', e.target.value)}
-                            className="mr-2"
-                          />
-                          <span className="text-base">Inside accessible/handicap stall</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold mb-1">Issues (optional)</label>
-                      <div className="space-y-2">
-                        <label className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={restroom.safety_concern}
-                            onChange={(e) => handleRestroomChange(restroom.id, 'safety_concern', e.target.checked)}
-                            className="mr-2"
-                          />
-                          <span className="text-base">Safety concern</span>
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={restroom.cleanliness_issue}
-                            onChange={(e) => handleRestroomChange(restroom.id, 'cleanliness_issue', e.target.checked)}
-                            className="mr-2"
-                          />
-                          <span className="text-base">Cleanliness issue</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {(restroom.safety_concern || restroom.cleanliness_issue) && (
-                      <div>
-                        <label className="block text-sm font-semibold mb-1">Issue Notes</label>
-                        <textarea
-                          value={restroom.issue_notes}
-                          onChange={(e) => handleRestroomChange(restroom.id, 'issue_notes', e.target.value)}
-                          placeholder="Describe the specific issues..."
-                          className="w-full border border-gray-300 rounded px-3 py-2 text-base"
-                          rows={2}
-                        />
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="block text-sm font-semibold mb-1">Additional Notes</label>
-                      <textarea
-                        value={restroom.additional_notes}
-                        onChange={(e) => handleRestroomChange(restroom.id, 'additional_notes', e.target.value)}
-                        placeholder="Any other observations..."
-                        className="w-full border border-gray-300 rounded px-3 py-2 text-base"
-                        rows={2}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold mb-1">Photo (optional)</label>
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/jpg,image/png,image/webp,image/heic"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) {
-                            if (file.size > 5 * 1024 * 1024) {
-                              alert('File too large. Max 5MB.')
-                              return
-                            }
-                            handleRestroomChange(restroom.id, 'photo', file)
-                          }
-                        }}
-                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-                      />
-                      {restroom.photo && (
-                        <p className="text-xs text-green-600 mt-1">✓ {restroom.photo.name}</p>
-                      )}
-                    </div>
+                {restroomError && (
+                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
+                    {restroomError}
                   </div>
                 )}
-              </div>
+
+                <button
+                  type="submit"
+                  disabled={restroomLoading}
+                  className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg transition"
+                >
+                  {restroomLoading ? 'Adding...' : 'Add Restroom'}
+                </button>
+              </form>
             </div>
-          ))}
 
-          {/* Add Another Restroom Button */}
-          <button
-            type="button"
-            onClick={addRestroom}
-            className="w-full border-2 border-dashed border-gray-300 text-gray-600 font-semibold py-3 rounded hover:border-blue-400 hover:text-blue-600 transition text-base"
-          >
-            + Add Another Restroom
-          </button>
-
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={loading || !venueData.lat || !venueData.lng}
-            className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white font-bold py-4 rounded-lg text-lg"
-          >
-            {loading ? '⏳ Submitting...' : '✅ Submit All'}
-          </button>
-        </form>
+            {/* Done Button */}
+            {restrooms.length > 0 && (
+              <button
+                onClick={resetForm}
+                className="w-full border-2 border-teal-600 text-teal-600 hover:bg-teal-50 font-semibold py-3 rounded-lg transition"
+              >
+                Done - Add Another Venue
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

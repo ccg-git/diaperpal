@@ -1,36 +1,47 @@
 'use client'
-import { useState, useEffect } from 'react'
+
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import {
+  VenueType,
+  Gender,
+  RestroomWithPhotos,
+  VENUE_TYPE_CONFIG,
+  GENDER_CONFIG,
+  STATION_LOCATION_CONFIG,
+  STATUS_CONFIG,
+} from '@/lib/types'
 
-interface Facility {
-  id: string
-  privacy_type: string
-  gender: string
-  verification_status: string
-  station_location: string
-  safety_concern: boolean
-  cleanliness_issue: boolean
-}
-
-interface NearbyLocation {
+interface NearbyVenue {
   id: string
   name: string
   address: string
-  distance: number
   lat: number
   lng: number
-  venue_type: string
-  facilities: Facility[]
+  venue_type: VenueType
+  distance: number
+  distance_display: string
+  is_open: boolean
+  hours_today: { open: string; close: string } | null
+  rating: number | null
+  review_count: number | null
+  restrooms: RestroomWithPhotos[]
 }
 
 export default function MapPage() {
   const [view, setView] = useState<'map' | 'list'>('list')
-  const [stations, setStations] = useState<NearbyLocation[]>([])
+  const [venues, setVenues] = useState<NearbyVenue[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
-  const [genderFilter, setGenderFilter] = useState<'all' | 'mens' | 'womens'>('all')
-  const [selectedVenueTypes, setSelectedVenueTypes] = useState<Set<string>>(new Set())
+
+  // Filters
+  const [genderFilter, setGenderFilter] = useState<Gender | 'all'>('all')
+  const [selectedVenueTypes, setSelectedVenueTypes] = useState<Set<VenueType>>(new Set())
+  const [openNowFilter, setOpenNowFilter] = useState(false)
+
+  // Refs for horizontal scroll
+  const venueTypeScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -38,12 +49,13 @@ export default function MapPage() {
         (position) => {
           const { latitude, longitude } = position.coords
           setUserLocation({ lat: latitude, lng: longitude })
-          fetchNearbyStations(latitude, longitude)
+          fetchNearbyVenues(latitude, longitude)
         },
         (err) => {
           console.error('Geolocation error:', err)
-          setError('Unable to get your location. Please enable location services.')
-          setLoading(false)
+          // Default to Manhattan Beach if GPS denied
+          setUserLocation({ lat: 33.8845, lng: -118.3976 })
+          fetchNearbyVenues(33.8845, -118.3976)
         }
       )
     } else {
@@ -52,31 +64,28 @@ export default function MapPage() {
     }
   }, [])
 
-  async function fetchNearbyStations(lat: number, lng: number) {
+  async function fetchNearbyVenues(lat: number, lng: number) {
     try {
-      const response = await fetch(
-        `/api/locations/nearby?lat=${lat}&lng=${lng}&radius=5`
-      )
+      setLoading(true)
+      const response = await fetch(`/api/venues/nearby?lat=${lat}&lng=${lng}&radius=8`)
       const data = await response.json()
-      setStations(data)
+
+      if (Array.isArray(data)) {
+        setVenues(data)
+      } else {
+        setVenues([])
+      }
       setLoading(false)
     } catch (err) {
-      console.error('Error fetching stations:', err)
-      setError('Failed to load nearby stations')
+      console.error('Error fetching venues:', err)
+      setError('Failed to load nearby venues')
       setLoading(false)
     }
   }
 
-  const venueTypes = [
-    { value: 'food_drink', label: 'Food & Drink', emoji: '☕' },
-    { value: 'shopping', label: 'Shopping', emoji: '🛍️' },
-    { value: 'parks_outdoors', label: 'Parks', emoji: '🌳' },
-    { value: 'family_attractions', label: 'Family', emoji: '🎨' },
-    { value: 'errands', label: 'Errands', emoji: '📋' },
-  ]
-
-  function toggleVenueType(type: string) {
-    setSelectedVenueTypes(prev => {
+  // Toggle venue type in multi-select
+  function toggleVenueType(type: VenueType) {
+    setSelectedVenueTypes((prev) => {
       const next = new Set(prev)
       if (next.has(type)) {
         next.delete(type)
@@ -87,178 +96,187 @@ export default function MapPage() {
     })
   }
 
-  function getVenueTypeEmoji(type: string) {
-    switch (type) {
-      case 'food_drink': return '☕'
-      case 'shopping': return '🛍️'
-      case 'parks_outdoors': return '🌳'
-      case 'family_attractions': return '🎨'
-      case 'errands': return '📋'
-      default: return '📍'
-    }
-  }
-
-  function getPrivacyLabel(facility: Facility) {
-    if (facility.privacy_type === 'private') return 'Private Room'
-    if (facility.privacy_type === 'multi_stall' && facility.station_location === 'accessible_stall') return 'Private Stall'
-    if (facility.privacy_type === 'multi_stall' && facility.station_location === 'open_wall') return 'Open Wall'
-    return ''
-  }
-
-  function getGenderIcon(gender: string) {
-    switch (gender) {
-      case 'mens': return '👨'
-      case 'womens': return '👩'
-      case 'all_gender': return '🚻'
-      default: return ''
-    }
-  }
-
-  function getGenderLabel(gender: string) {
-    switch (gender) {
-      case 'mens': return "Men's"
-      case 'womens': return "Women's"
-      case 'all_gender': return 'All-Gender'
-      default: return gender
-    }
-  }
-
-  function formatDistance(miles: number) {
-    if (miles < 0.3) {
-      const feet = Math.round(miles * 5280)
-      return `${feet} ft`
-    }
-    return `${miles.toFixed(1)} mi`
-  }
-
-  // Filter facilities based on gender selection
-  function getMatchingFacilities(facilities: Facility[]) {
-    if (genderFilter === 'all') return facilities
-    return facilities.filter(f =>
-      f.gender === genderFilter || f.gender === 'all_gender'
-    )
-  }
-
-  // Count venues with matching facilities
-  function countVenuesWithGender(gender: 'mens' | 'womens') {
-    return stations.filter(station =>
-      station.facilities.some(f => f.gender === gender || f.gender === 'all_gender')
-    ).length
-  }
-
-  // Filter stations based on gender and venue type filters
-  const filteredStations = stations.filter(station => {
-    // Venue type filter (empty set = show all)
-    if (selectedVenueTypes.size > 0 && !selectedVenueTypes.has(station.venue_type)) {
+  // Filter venues based on current filters
+  const filteredVenues = venues.filter((venue) => {
+    // Venue type filter (empty = show all)
+    if (selectedVenueTypes.size > 0 && !selectedVenueTypes.has(venue.venue_type)) {
       return false
     }
+
+    // Open now filter
+    if (openNowFilter && !venue.is_open) {
+      return false
+    }
+
     // Gender filter
     if (genderFilter !== 'all') {
-      return station.facilities.some(f => f.gender === genderFilter || f.gender === 'all_gender')
+      const hasMatchingRestroom = venue.restrooms.some(
+        (r) => r.gender === genderFilter || r.gender === 'all_gender'
+      )
+      if (!hasMatchingRestroom) return false
     }
+
     return true
   })
 
+  // Get matching restrooms for display (based on gender filter)
+  function getMatchingRestrooms(restrooms: RestroomWithPhotos[]): RestroomWithPhotos[] {
+    if (genderFilter === 'all') return restrooms
+    return restrooms.filter((r) => r.gender === genderFilter || r.gender === 'all_gender')
+  }
+
+  // Count venues with each gender
+  function countVenuesWithGender(gender: Gender): number {
+    return venues.filter((v) =>
+      v.restrooms.some((r) => r.gender === gender || r.gender === 'all_gender')
+    ).length
+  }
+
+  // Get other genders not matching current filter
+  function getOtherGenders(restrooms: RestroomWithPhotos[]): string[] {
+    if (genderFilter === 'all') return []
+    const otherGenders = restrooms
+      .filter((r) => r.gender !== genderFilter && r.gender !== 'all_gender')
+      .map((r) => GENDER_CONFIG[r.gender].label)
+    return [...new Set(otherGenders)]
+  }
+
+  // Track direction click
+  async function handleDirectionsClick(venue: NearbyVenue, e: React.MouseEvent) {
+    e.preventDefault()
+
+    // Track click
+    try {
+      await fetch('/api/direction-click', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ venue_id: venue.id }),
+      })
+    } catch (err) {
+      console.error('Failed to track direction click:', err)
+    }
+
+    // Open maps - iOS uses Apple Maps, others use Google Maps
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    const url = isIOS
+      ? `maps://maps.apple.com/?daddr=${venue.lat},${venue.lng}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}`
+
+    window.open(url, '_blank')
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* View Toggle */}
-      <div className="sticky top-0 bg-white border-b border-gray-200 p-4 z-10">
-        <div className="max-w-2xl mx-auto flex gap-2">
-          <button
-            onClick={() => setView('map')}
-            className={`flex-1 py-3 px-4 rounded-lg font-semibold transition ${
-              view === 'map'
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            🗺️ Map
-          </button>
-          <button
-            onClick={() => setView('list')}
-            className={`flex-1 py-3 px-4 rounded-lg font-semibold transition ${
-              view === 'list'
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            📋 List
-          </button>
+      {/* Sticky Header with View Toggle */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
+        {/* View Toggle */}
+        <div className="px-4 py-3">
+          <div className="max-w-2xl mx-auto flex gap-2">
+            <button
+              onClick={() => setView('map')}
+              className={`flex-1 py-3 px-4 rounded-lg font-semibold transition ${
+                view === 'map'
+                  ? 'bg-teal-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              🗺️ Map
+            </button>
+            <button
+              onClick={() => setView('list')}
+              className={`flex-1 py-3 px-4 rounded-lg font-semibold transition ${
+                view === 'list'
+                  ? 'bg-teal-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              📋 List
+            </button>
+          </div>
         </div>
-      </div>
 
-      <div className="max-w-2xl mx-auto p-4">
         {/* Filters */}
-        {!loading && !error && stations.length > 0 && (
-          <div className="mb-4 space-y-4">
-            {/* Gender Filter - First */}
-            <div>
-              <p className="text-sm text-gray-600 mb-2">Filter by restroom:</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setGenderFilter('all')}
-                  className={`flex-1 py-3 px-4 rounded-lg font-semibold transition text-base ${
-                    genderFilter === 'all'
-                      ? 'bg-gray-700 text-white'
-                      : 'bg-white border-2 border-gray-300 text-gray-600 hover:border-gray-400'
-                  }`}
-                >
-                  All ({stations.length})
-                </button>
-                <button
-                  onClick={() => setGenderFilter('mens')}
-                  className={`flex-1 py-3 px-4 rounded-lg font-semibold transition text-base ${
-                    genderFilter === 'mens'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white border-2 border-blue-400 text-blue-600 hover:border-blue-500'
-                  }`}
-                >
-                  👨 Men's ({countVenuesWithGender('mens')})
-                </button>
-                <button
-                  onClick={() => setGenderFilter('womens')}
-                  className={`flex-1 py-3 px-4 rounded-lg font-semibold transition text-base ${
-                    genderFilter === 'womens'
-                      ? 'bg-pink-600 text-white'
-                      : 'bg-white border-2 border-pink-400 text-pink-600 hover:border-pink-500'
-                  }`}
-                >
-                  👩 Women's ({countVenuesWithGender('womens')})
-                </button>
-              </div>
+        {!loading && !error && venues.length > 0 && (
+          <div className="px-4 pb-3 space-y-3">
+            {/* Row 1: Gender Filter */}
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+              <button
+                onClick={() => setGenderFilter('all')}
+                className={`flex-shrink-0 py-2 px-4 rounded-full font-semibold text-sm transition whitespace-nowrap ${
+                  genderFilter === 'all'
+                    ? 'bg-gray-700 text-white'
+                    : 'bg-white border border-gray-300 text-gray-700 hover:border-gray-400'
+                }`}
+              >
+                All ({venues.length})
+              </button>
+              <button
+                onClick={() => setGenderFilter(genderFilter === 'mens' ? 'all' : 'mens')}
+                className={`flex-shrink-0 py-2 px-4 rounded-full font-semibold text-sm transition whitespace-nowrap ${
+                  genderFilter === 'mens'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white border border-blue-300 text-blue-600 hover:border-blue-400'
+                }`}
+              >
+                👨 Men's ({countVenuesWithGender('mens')})
+              </button>
+              <button
+                onClick={() => setGenderFilter(genderFilter === 'womens' ? 'all' : 'womens')}
+                className={`flex-shrink-0 py-2 px-4 rounded-full font-semibold text-sm transition whitespace-nowrap ${
+                  genderFilter === 'womens'
+                    ? 'bg-pink-600 text-white'
+                    : 'bg-white border border-pink-300 text-pink-600 hover:border-pink-400'
+                }`}
+              >
+                👩 Women's ({countVenuesWithGender('womens')})
+              </button>
+              <button
+                onClick={() => setOpenNowFilter(!openNowFilter)}
+                className={`flex-shrink-0 py-2 px-4 rounded-full font-semibold text-sm transition whitespace-nowrap ${
+                  openNowFilter
+                    ? 'bg-green-600 text-white'
+                    : 'bg-white border border-green-300 text-green-600 hover:border-green-400'
+                }`}
+              >
+                🕐 Open Now
+              </button>
             </div>
 
-            {/* Venue Type Filter - Multi-select */}
-            <div>
-              <p className="text-sm text-gray-600 mb-2">
-                Filter by venue type: {selectedVenueTypes.size === 0 ? '(showing all)' : `(${selectedVenueTypes.size} selected)`}
-              </p>
-              <div className="flex gap-2 flex-wrap">
-                {venueTypes.map((type) => {
-                  const isSelected = selectedVenueTypes.has(type.value)
+            {/* Row 2: Venue Type Filter (multi-select) */}
+            <div
+              ref={venueTypeScrollRef}
+              className="flex gap-2 overflow-x-auto scrollbar-hide pb-1"
+            >
+              {(Object.entries(VENUE_TYPE_CONFIG) as [VenueType, { emoji: string; label: string }][]).map(
+                ([type, config]) => {
+                  const isSelected = selectedVenueTypes.has(type)
                   return (
                     <button
-                      key={type.value}
-                      onClick={() => toggleVenueType(type.value)}
-                      className={`py-2 px-3 rounded-lg font-semibold transition text-sm flex items-center gap-1 ${
+                      key={type}
+                      onClick={() => toggleVenueType(type)}
+                      className={`flex-shrink-0 py-2 px-3 rounded-full font-semibold text-sm transition whitespace-nowrap flex items-center gap-1 ${
                         isSelected
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-400'
+                          ? 'bg-teal-600 text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:border-teal-400'
                       }`}
                     >
                       {isSelected && <span>✓</span>}
-                      {type.emoji} {type.label}
+                      {config.emoji} {config.label}
                     </button>
                   )
-                })}
-              </div>
+                }
+              )}
             </div>
           </div>
         )}
+      </div>
 
+      {/* Main Content */}
+      <div className="max-w-2xl mx-auto p-4">
         {loading && (
           <div className="text-center py-12">
-            <p className="text-gray-600">Finding nearby stations...</p>
+            <div className="inline-block w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-gray-600">Finding nearby venues...</p>
           </div>
         )}
 
@@ -268,92 +286,114 @@ export default function MapPage() {
           </div>
         )}
 
-        {!loading && !error && filteredStations.length === 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800 text-center">
-            {stations.length === 0
+        {!loading && !error && filteredVenues.length === 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-800 text-center">
+            {venues.length === 0
               ? 'No venues found nearby. Check back soon!'
-              : 'No venues match this filter.'}
+              : 'No venues match your filters.'}
           </div>
         )}
 
         {/* List View */}
-        {view === 'list' && filteredStations.length > 0 && (
+        {view === 'list' && filteredVenues.length > 0 && (
           <div className="space-y-4">
-            {filteredStations.map((station) => {
-              const matchingFacilities = getMatchingFacilities(station.facilities)
-              const verifiedFacilities = matchingFacilities.filter(
-                f => f.verification_status === 'verified_present'
-              )
-              const unverifiedFacilities = matchingFacilities.filter(
-                f => f.verification_status === 'unverified'
-              )
-              const otherGenders = station.facilities
-                .filter(f => !matchingFacilities.includes(f))
-                .map(f => getGenderLabel(f.gender))
+            {filteredVenues.map((venue) => {
+              const matchingRestrooms = getMatchingRestrooms(venue.restrooms)
+              const verifiedRestrooms = matchingRestrooms.filter((r) => r.status === 'verified_present')
+              const unverifiedRestrooms = matchingRestrooms.filter((r) => r.status === 'unverified')
+              const otherGenders = getOtherGenders(venue.restrooms)
 
               return (
-                <div key={station.id} className="bg-white border border-gray-200 rounded-lg p-4">
-                  {/* Header: Venue name + distance */}
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">{getVenueTypeEmoji(station.venue_type)}</span>
-                      <h3 className="font-bold text-lg text-gray-900">{station.name}</h3>
+                <div
+                  key={venue.id}
+                  className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
+                >
+                  <div className="p-4">
+                    {/* Header: Venue name + distance */}
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-2xl flex-shrink-0">
+                          {VENUE_TYPE_CONFIG[venue.venue_type]?.emoji || '📍'}
+                        </span>
+                        <div className="min-w-0">
+                          <h3 className="font-bold text-lg text-gray-900 truncate">{venue.name}</h3>
+                          {venue.rating && (
+                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                              <span className="text-amber-500">★</span>
+                              <span>{venue.rating}</span>
+                              {venue.review_count && (
+                                <span className="text-gray-400">({venue.review_count})</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <span className="text-teal-600 font-bold text-lg">
+                          {venue.distance_display}
+                        </span>
+                        <div className="text-xs mt-0.5">
+                          {venue.is_open ? (
+                            <span className="text-green-600 font-medium">Open</span>
+                          ) : (
+                            <span className="text-red-500 font-medium">Closed</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <span className="text-blue-600 font-semibold">
-                      {formatDistance(station.distance)}
-                    </span>
-                  </div>
 
-                  {/* Facilities */}
-                  <div className="space-y-1 mb-3">
-                    {verifiedFacilities.map((facility) => (
-                      <div key={facility.id} className="text-sm text-gray-700 flex items-center gap-1">
-                        <span className="text-green-600">✅</span>
-                        <span>{getGenderIcon(facility.gender)}</span>
-                        <span>{getGenderLabel(facility.gender)}</span>
-                        {getPrivacyLabel(facility) && (
-                          <>
-                            <span className="text-gray-400">•</span>
-                            <span>{getPrivacyLabel(facility)}</span>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                    {unverifiedFacilities.map((facility) => (
-                      <div key={facility.id} className="text-sm text-gray-500 flex items-center gap-1">
-                        <span>❓</span>
-                        <span>{getGenderIcon(facility.gender)}</span>
-                        <span>{getGenderLabel(facility.gender)}</span>
-                        <span className="text-gray-400">•</span>
-                        <span>Unverified</span>
-                      </div>
-                    ))}
-                  </div>
+                    {/* Restrooms */}
+                    <div className="space-y-1.5 my-3">
+                      {verifiedRestrooms.map((restroom) => (
+                        <div
+                          key={restroom.id}
+                          className="text-sm text-gray-700 flex items-center gap-1.5"
+                        >
+                          <span className="text-green-600">{STATUS_CONFIG.verified_present.emoji}</span>
+                          <span>{GENDER_CONFIG[restroom.gender].emoji}</span>
+                          <span className="font-medium">{GENDER_CONFIG[restroom.gender].label}</span>
+                          <span className="text-gray-400">•</span>
+                          <span className="text-gray-500">
+                            {STATION_LOCATION_CONFIG[restroom.station_location].label}
+                          </span>
+                        </div>
+                      ))}
+                      {unverifiedRestrooms.map((restroom) => (
+                        <div
+                          key={restroom.id}
+                          className="text-sm text-gray-500 flex items-center gap-1.5"
+                        >
+                          <span>{STATUS_CONFIG.unverified.emoji}</span>
+                          <span>{GENDER_CONFIG[restroom.gender].emoji}</span>
+                          <span>{GENDER_CONFIG[restroom.gender].label}</span>
+                          <span className="text-gray-400">•</span>
+                          <span>Unverified</span>
+                        </div>
+                      ))}
+                    </div>
 
-                  {/* Other genders available */}
-                  {genderFilter !== 'all' && otherGenders.length > 0 && (
-                    <p className="text-xs text-gray-500 mb-3">
-                      (Also has {otherGenders.join(' & ')})
-                    </p>
-                  )}
+                    {/* Other genders available */}
+                    {genderFilter !== 'all' && otherGenders.length > 0 && (
+                      <p className="text-xs text-gray-500 mb-3">
+                        (Also has {otherGenders.join(' & ')})
+                      </p>
+                    )}
 
-                  {/* Action Buttons */}
-                  <div className="flex gap-3 mt-3">
-                    <a
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-lg text-center transition"
-                    >
-                      📍 Directions
-                    </a>
-                    <Link
-                      href={`/location/${station.id}`}
-                      className="flex-1 border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-lg text-center transition"
-                    >
-                      ⓘ Details
-                    </Link>
+                    {/* Action Buttons */}
+                    <div className="flex gap-3 mt-4">
+                      <button
+                        onClick={(e) => handleDirectionsClick(venue, e)}
+                        className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-lg text-center transition"
+                      >
+                        Get Directions
+                      </button>
+                      <Link
+                        href={`/location/${venue.id}`}
+                        className="flex-1 border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-lg text-center transition"
+                      >
+                        Details
+                      </Link>
+                    </div>
                   </div>
                 </div>
               )
@@ -361,18 +401,33 @@ export default function MapPage() {
           </div>
         )}
 
-        {/* Map View - Placeholder */}
-        {view === 'map' && stations.length > 0 && (
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="bg-blue-50 p-8 text-center">
-              <p className="text-blue-800 font-semibold mb-2">🗺️ Map View Coming Soon!</p>
-              <p className="text-blue-600 text-sm">
-                {stations.length} venues near you • Switch to List view for now
+        {/* Map View - Placeholder for Mapbox */}
+        {view === 'map' && venues.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="bg-teal-50 p-8 text-center min-h-[400px] flex flex-col items-center justify-center">
+              <div className="text-6xl mb-4">🗺️</div>
+              <p className="text-teal-800 font-semibold mb-2">Map View Coming Soon!</p>
+              <p className="text-teal-600 text-sm mb-4">
+                {filteredVenues.length} venue{filteredVenues.length !== 1 ? 's' : ''} near you
+              </p>
+              <p className="text-gray-500 text-xs">
+                Mapbox integration pending setup
               </p>
             </div>
           </div>
         )}
       </div>
+
+      {/* Add custom scrollbar hide CSS */}
+      <style jsx global>{`
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
     </div>
   )
 }
