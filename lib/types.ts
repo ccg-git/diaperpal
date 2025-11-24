@@ -70,8 +70,20 @@ export interface Restroom {
   verified_by_user_id: string | null
   verified_at: string | null
   moderation_status: ModerationStatus
+  // Safety and cleanliness issue tracking
+  has_safety_concern: boolean
+  safety_concern_notes: string | null
+  has_cleanliness_issue: boolean
+  cleanliness_issue_notes: string | null
+  // Tips like "ask for key", general notes
+  additional_notes: string | null
+  // Legacy field - kept for backwards compatibility
   safety_notes: string | null
   admin_notes: string | null
+  // Direct photo URL (simpler than separate table)
+  photo_url: string | null
+  // Usage tracking
+  times_directions_clicked: number
   created_at: string
   updated_at: string
   created_by_user_id: string | null
