@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useJsApiLoader, Autocomplete } from '@react-google-maps/api'
 import {
   VenueType,
   Gender,
@@ -12,6 +13,8 @@ import {
   STATUS_CONFIG,
 } from '@/lib/types'
 import { formatTime } from '@/lib/utils'
+
+const libraries: ('places')[] = ['places']
 
 interface NearbyVenue {
   id: string
@@ -37,29 +40,90 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null)
   const [locationName, setLocationName] = useState('Finding location...')
 
+  // Location search
+  const [showLocationSearch, setShowLocationSearch] = useState(false)
+  const [isUsingCurrentLocation, setIsUsingCurrentLocation] = useState(true)
+  const [currentCoords, setCurrentCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+
   // Filters
   const [genderFilter, setGenderFilter] = useState<Gender | null>(null)
   const [selectedVenueTypes, setSelectedVenueTypes] = useState<Set<VenueType>>(new Set())
   const [showClosed, setShowClosed] = useState(false)
+
+  // Load Google Maps API
+  const { isLoaded } = useJsApiLoader({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+    libraries,
+  })
 
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords
-          setLocationName('Manhattan Beach, CA') // TODO: Reverse geocode
+          setLocationName('Current Location')
+          setCurrentCoords({ lat: latitude, lng: longitude })
+          setIsUsingCurrentLocation(true)
           fetchNearbyVenues(latitude, longitude)
         },
         () => {
           setLocationName('Manhattan Beach, CA')
+          setCurrentCoords({ lat: 33.8845, lng: -118.3976 })
+          setIsUsingCurrentLocation(true)
           fetchNearbyVenues(33.8845, -118.3976)
         }
       )
     } else {
       setLocationName('Manhattan Beach, CA')
+      setCurrentCoords({ lat: 33.8845, lng: -118.3976 })
+      setIsUsingCurrentLocation(true)
       fetchNearbyVenues(33.8845, -118.3976)
     }
   }, [])
+
+  const onAutocompleteLoad = useCallback((autocomplete: google.maps.places.Autocomplete) => {
+    autocompleteRef.current = autocomplete
+  }, [])
+
+  const onPlaceChanged = useCallback(() => {
+    const place = autocompleteRef.current?.getPlace()
+    if (place?.geometry?.location) {
+      const lat = place.geometry.location.lat()
+      const lng = place.geometry.location.lng()
+
+      // Get a friendly name for the location
+      const name = place.name || place.formatted_address?.split(',')[0] || 'Selected Location'
+
+      setLocationName(name)
+      setCurrentCoords({ lat, lng })
+      setIsUsingCurrentLocation(false)
+      setShowLocationSearch(false)
+      fetchNearbyVenues(lat, lng)
+    }
+  }, [])
+
+  function returnToCurrentLocation() {
+    setLoading(true)
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords
+          setLocationName('Current Location')
+          setCurrentCoords({ lat: latitude, lng: longitude })
+          setIsUsingCurrentLocation(true)
+          fetchNearbyVenues(latitude, longitude)
+        },
+        () => {
+          setLocationName('Manhattan Beach, CA')
+          setCurrentCoords({ lat: 33.8845, lng: -118.3976 })
+          setIsUsingCurrentLocation(true)
+          fetchNearbyVenues(33.8845, -118.3976)
+        }
+      )
+    }
+  }
 
   async function fetchNearbyVenues(lat: number, lng: number) {
     try {
@@ -200,11 +264,80 @@ export default function MapPage() {
         </div>
 
         {/* Location Bar */}
-        <div className="mt-2 flex items-center text-sm text-gray-600">
+        <button
+          onClick={() => setShowLocationSearch(true)}
+          className="mt-2 flex items-center text-sm text-gray-600 hover:text-teal-600 transition w-full"
+        >
           <span className="text-teal-600">📍</span>
-          <span className="ml-1">{locationName}</span>
-        </div>
+          <span className="ml-1 flex-1 text-left">{locationName}</span>
+          {!isUsingCurrentLocation && (
+            <span
+              onClick={(e) => {
+                e.stopPropagation()
+                returnToCurrentLocation()
+              }}
+              className="text-gray-400 hover:text-gray-600 px-2"
+              title="Return to current location"
+            >
+              ×
+            </span>
+          )}
+          <span className="text-gray-400 text-xs">Change</span>
+        </button>
       </header>
+
+      {/* Location Search Modal */}
+      {showLocationSearch && isLoaded && (
+        <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setShowLocationSearch(false)}>
+          <div
+            className="absolute top-0 left-0 right-0 bg-white shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4">
+              <div className="flex items-center gap-3 mb-4">
+                <button
+                  onClick={() => setShowLocationSearch(false)}
+                  className="text-gray-500 hover:text-gray-700 text-xl"
+                >
+                  ←
+                </button>
+                <h2 className="text-lg font-semibold text-gray-900">Search Location</h2>
+              </div>
+
+              <Autocomplete
+                onLoad={onAutocompleteLoad}
+                onPlaceChanged={onPlaceChanged}
+                options={{
+                  componentRestrictions: { country: 'us' },
+                  types: ['geocode', 'establishment'],
+                }}
+              >
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search for a city, address, or place..."
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none text-base"
+                  autoFocus
+                />
+              </Autocomplete>
+
+              <button
+                onClick={() => {
+                  returnToCurrentLocation()
+                  setShowLocationSearch(false)
+                }}
+                className="mt-4 w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 rounded-lg transition"
+              >
+                <span className="text-teal-600 text-xl">📍</span>
+                <div>
+                  <p className="font-medium text-gray-900">Use Current Location</p>
+                  <p className="text-sm text-gray-500">Find venues near you</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 space-y-3">
