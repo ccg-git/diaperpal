@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { createClient } from '@supabase/supabase-js'
 import {
   VENUE_TYPE_CONFIG,
   GENDER_CONFIG,
@@ -11,7 +12,7 @@ import {
   VerificationStatus,
   HoursJson,
 } from '@/lib/types'
-import { formatTime, getFormattedWeeklyHours } from '@/lib/utils'
+import { formatTime, getFormattedWeeklyHours, isVenueOpen, getTodayHours } from '@/lib/utils'
 
 interface Restroom {
   id: string
@@ -41,21 +42,45 @@ interface VenueDetail {
 }
 
 async function getVenueDetails(id: string): Promise<VenueDetail | null> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
-    `http://localhost:${process.env.PORT || 3000}`
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 
   try {
-    const res = await fetch(`${baseUrl}/api/venues/${id}`, {
-      cache: 'no-store',
-    })
+    // Fetch venue with restrooms and photos
+    const { data: venue, error: venueError } = await supabase
+      .from('venues')
+      .select(`
+        *,
+        restrooms (
+          *,
+          photos:restroom_photos(*)
+        )
+      `)
+      .eq('id', id)
+      .single()
 
-    if (!res.ok) {
+    if (venueError || !venue) {
+      console.error('Error fetching venue:', venueError)
       return null
     }
 
-    return res.json()
+    // Filter out verified_absent restrooms (don't show to users)
+    const filteredRestrooms = (venue.restrooms || []).filter(
+      (r: { status: string }) => r.status !== 'verified_absent'
+    )
+
+    // Calculate open status
+    const is_open = isVenueOpen(venue.hours_json)
+    const hours_today = getTodayHours(venue.hours_json)
+
+    return {
+      ...venue,
+      restrooms: filteredRestrooms,
+      is_open,
+      hours_today,
+    }
   } catch (error) {
     console.error('Error fetching venue:', error)
     return null
