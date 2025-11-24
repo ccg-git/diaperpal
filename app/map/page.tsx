@@ -299,12 +299,101 @@ export default function MapPage() {
           </div>
         )}
 
-        {/* Map View Placeholder */}
+        {/* Map View */}
         {!loading && !error && view === 'map' && (
-          <div className="bg-teal-50 rounded-xl border border-teal-200 min-h-[60vh] flex flex-col items-center justify-center">
-            <span className="text-6xl mb-4">🗺️</span>
-            <p className="text-teal-800 font-semibold">Map View Coming Soon</p>
-            <p className="text-teal-600 text-sm mt-1">Mapbox integration pending</p>
+          <div className="relative">
+            {/* Map Area - Placeholder */}
+            <div className="bg-gradient-to-b from-teal-100 to-teal-50 min-h-[60vh] rounded-xl border border-teal-200 relative overflow-hidden">
+              {/* Grid lines to simulate map */}
+              <div className="absolute inset-0 opacity-10">
+                {[...Array(10)].map((_, i) => (
+                  <div key={`h-${i}`} className="absolute w-full h-px bg-teal-600" style={{ top: `${i * 10}%` }} />
+                ))}
+                {[...Array(10)].map((_, i) => (
+                  <div key={`v-${i}`} className="absolute h-full w-px bg-teal-600" style={{ left: `${i * 10}%` }} />
+                ))}
+              </div>
+
+              {/* Sample venue pins */}
+              {filteredVenues.slice(0, 5).map((venue, index) => (
+                <div
+                  key={venue.id}
+                  className="absolute cursor-pointer transform -translate-x-1/2 -translate-y-1/2 hover:scale-110 transition"
+                  style={{
+                    left: `${20 + (index * 15)}%`,
+                    top: `${25 + ((index % 3) * 20)}%`,
+                  }}
+                  onClick={() => router.push(`/location/${venue.id}`)}
+                >
+                  <div className="relative">
+                    <div className="w-10 h-10 bg-white rounded-full border-2 border-teal-600 flex items-center justify-center shadow-lg">
+                      <span className="text-lg">{VENUE_TYPE_CONFIG[venue.venue_type]?.emoji}</span>
+                    </div>
+                    <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-teal-600 rotate-45" />
+                  </div>
+                </div>
+              ))}
+
+              {/* Mapbox setup message */}
+              <div className="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg p-4 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🗺️</span>
+                  <div>
+                    <p className="font-semibold text-gray-900">Map Coming Soon</p>
+                    <p className="text-sm text-gray-600">
+                      Add NEXT_PUBLIC_MAPBOX_TOKEN to enable full map view
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Sheet Preview - shows when venue would be selected */}
+            {filteredVenues.length > 0 && (
+              <div className="mt-4 bg-white rounded-xl border border-gray-200 p-4 shadow-lg">
+                <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
+                <div
+                  className="cursor-pointer"
+                  onClick={() => router.push(`/location/${filteredVenues[0].id}`)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-lg text-gray-900">
+                        {filteredVenues[0].name}
+                      </h3>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        {VENUE_TYPE_CONFIG[filteredVenues[0].venue_type]?.emoji}{' '}
+                        {VENUE_TYPE_CONFIG[filteredVenues[0].venue_type]?.label}
+                      </p>
+                    </div>
+                    <span className="text-xl font-bold text-teal-600">
+                      {filteredVenues[0].distance_display}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {filteredVenues[0].is_open ? (
+                        <>
+                          <span className="w-2 h-2 bg-green-500 rounded-full" />
+                          <span className="text-green-600 text-sm font-medium">Open</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-2 h-2 bg-red-500 rounded-full" />
+                          <span className="text-red-500 text-sm font-medium">Closed</span>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => handleDirections(filteredVenues[0], e)}
+                      className="bg-teal-600 hover:bg-teal-700 text-white font-semibold px-4 py-2 rounded-lg text-sm"
+                    >
+                      🧭 Directions
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
