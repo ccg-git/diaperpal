@@ -12,6 +12,7 @@ import {
   HoursJson,
 } from '@/lib/types'
 import { formatTime, getFormattedWeeklyHours } from '@/lib/utils'
+import ShareButton from '@/app/components/ShareButton'
 
 interface Restroom {
   id: string
@@ -87,21 +88,52 @@ export default async function LocationDetailPage({
     .filter((r) => r.safety_notes)
     .map((r) => r.safety_notes!)
 
+  // Share URL
+  const shareUrl = `https://diaperpal.com/location/${venue.id}`
+
+  // Hero photo
+  const heroPhoto = venue.photo_urls?.[0]
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3">
-        <div className="max-w-2xl mx-auto flex items-center">
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
           <Link
             href="/map"
             className="text-teal-600 hover:text-teal-700 font-semibold flex items-center gap-1"
           >
             ← Back
           </Link>
+          <ShareButton
+            title={venue.name}
+            text={`Check out ${venue.name} on DiaperPal - verified changing station!`}
+            url={shareUrl}
+          />
         </div>
       </div>
 
       <div className="max-w-2xl mx-auto">
+        {/* Hero Image */}
+        {heroPhoto ? (
+          <div className="relative h-48 bg-gray-200">
+            <img
+              src={heroPhoto}
+              alt={venue.name}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
+              Google Photos
+            </div>
+          </div>
+        ) : (
+          <div className="h-32 bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center">
+            <span className="text-6xl">
+              {VENUE_TYPE_CONFIG[venue.venue_type]?.emoji || '📍'}
+            </span>
+          </div>
+        )}
+
         {/* Venue Header */}
         <div className="bg-white p-6 border-b border-gray-200">
           <div className="flex items-start gap-3">
@@ -185,7 +217,7 @@ export default async function LocationDetailPage({
         {/* Restrooms Section */}
         <div className="p-6">
           <h2 className="text-lg font-bold text-gray-900 mb-4">
-            Changing Stations ({venue.restrooms.length})
+            🚻 Changing Stations ({venue.restrooms.length})
           </h2>
 
           {/* Verified Restrooms */}
@@ -207,7 +239,7 @@ export default async function LocationDetailPage({
                           <div className="font-semibold text-gray-900">
                             {GENDER_CONFIG[restroom.gender].label} Restroom
                           </div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-sm text-green-600">
                             {STATUS_CONFIG.verified_present.emoji} Verified
                           </div>
                         </div>
@@ -234,6 +266,9 @@ export default async function LocationDetailPage({
                   {/* Photos */}
                   {restroom.photos && restroom.photos.length > 0 && (
                     <div className="border-t border-gray-100 px-4 py-3 bg-gray-50">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                        Verified Photos
+                      </p>
                       <div className="flex gap-2 overflow-x-auto">
                         {restroom.photos.map((photo) => (
                           <img
@@ -286,7 +321,7 @@ export default async function LocationDetailPage({
         {/* Hours Section */}
         {venue.hours_json && (
           <div className="p-6 pt-0">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Hours</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">🕐 Hours</h2>
             <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
               {weeklyHours.map(({ day, hours, isToday }) => (
                 <div
@@ -312,22 +347,29 @@ export default async function LocationDetailPage({
           </div>
         )}
 
-        {/* Venue Photos */}
-        {venue.photo_urls && venue.photo_urls.length > 0 && (
+        {/* Additional Venue Photos */}
+        {venue.photo_urls && venue.photo_urls.length > 1 && (
           <div className="p-6 pt-0">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Photos</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">📸 More Photos</h2>
             <div className="grid grid-cols-2 gap-2">
-              {venue.photo_urls.slice(0, 4).map((url, index) => (
+              {venue.photo_urls.slice(1, 5).map((url, index) => (
                 <img
                   key={index}
                   src={url}
-                  alt={`${venue.name} photo ${index + 1}`}
+                  alt={`${venue.name} photo ${index + 2}`}
                   className="w-full h-32 object-cover rounded-lg"
                 />
               ))}
             </div>
           </div>
         )}
+
+        {/* Google Attribution Footer */}
+        <div className="p-6 pt-0">
+          <div className="text-center text-xs text-gray-400 py-4 border-t border-gray-200">
+            Business information powered by Google Places API
+          </div>
+        </div>
 
         {/* Bottom Padding */}
         <div className="h-8" />
