@@ -68,7 +68,7 @@ export default function AdminPage() {
           address: place.formatted_address || '',
           lat: place.geometry!.location!.lat(),
           lng: place.geometry!.location!.lng(),
-          place_id: place.place_id,
+          place_id: place.place_id || '',
         }))
         setMessage('✅ Venue selected!')
         setTimeout(() => setMessage(''), 2000)

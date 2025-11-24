@@ -84,7 +84,7 @@ export default async function LocationDetailPage({ params }: { params: { id: str
           </div>
 
           {/* Get Directions Button */}
-          
+          <a
             href={`https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}`}
             target="_blank"
             rel="noopener noreferrer"
