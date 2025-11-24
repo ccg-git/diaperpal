@@ -9,8 +9,9 @@ import {
   Gender,
   StationLocation,
   VerificationStatus,
+  HoursJson,
 } from '@/lib/types'
-import { formatTime } from '@/lib/utils'
+import { formatTime, getFormattedWeeklyHours } from '@/lib/utils'
 
 interface Restroom {
   id: string
@@ -19,6 +20,7 @@ interface Restroom {
   restroom_location_text: string | null
   status: VerificationStatus
   verified_at: string | null
+  safety_notes: string | null
   photos: { id: string; image_url: string; is_primary: boolean }[]
 }
 
@@ -29,7 +31,7 @@ interface VenueDetail {
   lat: number
   lng: number
   venue_type: VenueType
-  hours_json: Record<string, { open: string; close: string }> | null
+  hours_json: HoursJson | null
   rating: number | null
   review_count: number | null
   photo_urls: string[] | null
@@ -60,26 +62,6 @@ async function getVenueDetails(id: string): Promise<VenueDetail | null> {
   }
 }
 
-// Track direction click (server action)
-async function trackDirectionClick(venueId: string) {
-  'use server'
-
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
-    `http://localhost:${process.env.PORT || 3000}`
-
-  try {
-    await fetch(`${baseUrl}/api/direction-click`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ venue_id: venueId }),
-    })
-  } catch (error) {
-    console.error('Error tracking click:', error)
-  }
-}
-
 export default async function LocationDetailPage({
   params,
 }: {
@@ -95,8 +77,15 @@ export default async function LocationDetailPage({
   const unverifiedRestrooms = venue.restrooms.filter((r) => r.status === 'unverified')
 
   // Get directions URL
-  const isIOS = false // Can't detect on server, default to Google Maps
   const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}`
+
+  // Get weekly hours
+  const weeklyHours = getFormattedWeeklyHours(venue.hours_json)
+
+  // Collect all tips from restrooms
+  const tips = venue.restrooms
+    .filter((r) => r.safety_notes)
+    .map((r) => r.safety_notes!)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -170,9 +159,28 @@ export default async function LocationDetailPage({
             rel="noopener noreferrer"
             className="block w-full mt-6 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3.5 rounded-lg text-center transition"
           >
-            Get Directions
+            🧭 Get Directions
           </a>
         </div>
+
+        {/* Tips Section */}
+        {tips.length > 0 && (
+          <div className="p-6 pb-0">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <div className="flex items-start gap-2">
+                <span className="text-xl">💡</span>
+                <div>
+                  <h3 className="font-semibold text-amber-900 mb-1">Tips</h3>
+                  <ul className="text-sm text-amber-800 space-y-1">
+                    {tips.map((tip, index) => (
+                      <li key={index}>{tip}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Restrooms Section */}
         <div className="p-6">
@@ -186,54 +194,58 @@ export default async function LocationDetailPage({
               {verifiedRestrooms.map((restroom) => (
                 <div
                   key={restroom.id}
-                  className="bg-white rounded-xl border border-gray-200 p-4"
+                  className="bg-white rounded-xl border border-gray-200 overflow-hidden"
                 >
-                  <div className="flex items-start gap-3">
-                    <span className="text-green-600 text-xl">
-                      {STATUS_CONFIG.verified_present.emoji}
-                    </span>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">
+                  {/* Restroom Header */}
+                  <div className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">
                           {GENDER_CONFIG[restroom.gender].emoji}
                         </span>
-                        <span className="font-semibold text-gray-900">
-                          {GENDER_CONFIG[restroom.gender].label}
-                        </span>
-                      </div>
-
-                      <div className="mt-2 space-y-1 text-sm text-gray-600">
-                        <div className="flex items-center gap-2">
-                          <span>{STATION_LOCATION_CONFIG[restroom.station_location].emoji}</span>
-                          <span>{STATION_LOCATION_CONFIG[restroom.station_location].label}</span>
-                          <span className="text-gray-400">-</span>
-                          <span className="text-gray-500">
-                            {STATION_LOCATION_CONFIG[restroom.station_location].description}
-                          </span>
+                        <div>
+                          <div className="font-semibold text-gray-900">
+                            {GENDER_CONFIG[restroom.gender].label} Restroom
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {STATUS_CONFIG.verified_present.emoji} Verified
+                          </div>
                         </div>
-
-                        {restroom.restroom_location_text && (
-                          <p className="text-gray-500 mt-1">
-                            📍 {restroom.restroom_location_text}
-                          </p>
-                        )}
                       </div>
-
-                      {/* Photos */}
-                      {restroom.photos && restroom.photos.length > 0 && (
-                        <div className="mt-3 flex gap-2 overflow-x-auto">
-                          {restroom.photos.map((photo) => (
-                            <img
-                              key={photo.id}
-                              src={photo.image_url}
-                              alt="Restroom"
-                              className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
-                            />
-                          ))}
-                        </div>
-                      )}
+                      <span className="text-xs bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full font-medium">
+                        {STATION_LOCATION_CONFIG[restroom.station_location].emoji}{' '}
+                        {STATION_LOCATION_CONFIG[restroom.station_location].label}
+                      </span>
                     </div>
+
+                    {/* Station Location Description */}
+                    <p className="text-sm text-gray-500 mt-3">
+                      {STATION_LOCATION_CONFIG[restroom.station_location].description}
+                    </p>
+
+                    {/* Location Text */}
+                    {restroom.restroom_location_text && (
+                      <p className="text-sm text-gray-600 mt-2 bg-gray-50 rounded-lg px-3 py-2">
+                        📍 {restroom.restroom_location_text}
+                      </p>
+                    )}
                   </div>
+
+                  {/* Photos */}
+                  {restroom.photos && restroom.photos.length > 0 && (
+                    <div className="border-t border-gray-100 px-4 py-3 bg-gray-50">
+                      <div className="flex gap-2 overflow-x-auto">
+                        {restroom.photos.map((photo) => (
+                          <img
+                            key={photo.id}
+                            src={photo.image_url}
+                            alt="Restroom"
+                            className="w-24 h-24 object-cover rounded-lg flex-shrink-0"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -250,12 +262,13 @@ export default async function LocationDetailPage({
                   key={restroom.id}
                   className="bg-gray-50 rounded-xl border border-gray-200 p-4"
                 >
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <span>{STATUS_CONFIG.unverified.emoji}</span>
-                    <span>{GENDER_CONFIG[restroom.gender].emoji}</span>
-                    <span>{GENDER_CONFIG[restroom.gender].label}</span>
-                    <span className="text-gray-400">•</span>
-                    <span className="text-gray-500">Needs verification</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <span>{STATUS_CONFIG.unverified.emoji}</span>
+                      <span>{GENDER_CONFIG[restroom.gender].emoji}</span>
+                      <span className="font-medium">{GENDER_CONFIG[restroom.gender].label}</span>
+                    </div>
+                    <span className="text-xs text-gray-500">Needs verification</span>
                   </div>
                 </div>
               ))}
@@ -269,6 +282,35 @@ export default async function LocationDetailPage({
             </div>
           )}
         </div>
+
+        {/* Hours Section */}
+        {venue.hours_json && (
+          <div className="p-6 pt-0">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Hours</h2>
+            <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+              {weeklyHours.map(({ day, hours, isToday }) => (
+                <div
+                  key={day}
+                  className={`flex justify-between px-4 py-3 ${
+                    isToday ? 'bg-teal-50' : ''
+                  }`}
+                >
+                  <span className={`font-medium ${isToday ? 'text-teal-700' : 'text-gray-700'}`}>
+                    {day}
+                    {isToday && (
+                      <span className="ml-2 text-xs bg-teal-600 text-white px-2 py-0.5 rounded-full">
+                        Today
+                      </span>
+                    )}
+                  </span>
+                  <span className={`${hours === 'Closed' ? 'text-red-500' : 'text-gray-600'}`}>
+                    {hours}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Venue Photos */}
         {venue.photo_urls && venue.photo_urls.length > 0 && (
@@ -286,6 +328,9 @@ export default async function LocationDetailPage({
             </div>
           </div>
         )}
+
+        {/* Bottom Padding */}
+        <div className="h-8" />
       </div>
     </div>
   )

@@ -42,9 +42,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch place details from Google Places API
-    const googleApiKey = process.env.GOOGLE_PLACES_API_KEY
+    const googleApiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
     if (!googleApiKey) {
-      return NextResponse.json({ error: 'Google Places API key not configured' }, { status: 500 })
+      return NextResponse.json({ error: 'Google Places API key not configured. Set GOOGLE_PLACES_API_KEY or NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in your environment.' }, { status: 500 })
     }
 
     const placeResponse = await fetch(

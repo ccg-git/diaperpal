@@ -19,6 +19,7 @@ interface RestroomForm {
   station_location: StationLocation
   restroom_location_text: string
   status: VerificationStatus
+  safety_notes: string
 }
 
 interface CreatedRestroom extends RestroomForm {
@@ -48,6 +49,7 @@ export default function AdminPage() {
     station_location: 'single_restroom',
     restroom_location_text: '',
     status: 'verified_present',
+    safety_notes: '',
   })
   const [restroomLoading, setRestroomLoading] = useState(false)
   const [restroomError, setRestroomError] = useState('')
@@ -100,6 +102,7 @@ export default function AdminPage() {
       station_location: 'single_restroom',
       restroom_location_text: '',
       status: 'verified_present',
+      safety_notes: '',
     })
     if (inputRef.current) {
       inputRef.current.value = ''
@@ -201,6 +204,7 @@ export default function AdminPage() {
         station_location: 'single_restroom',
         restroom_location_text: '',
         status: 'verified_present',
+        safety_notes: '',
       })
     } catch (error) {
       setRestroomError(error instanceof Error ? error.message : 'Failed to add restroom')
@@ -246,7 +250,13 @@ export default function AdminPage() {
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-2xl mx-auto">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
-            Error loading Google Maps. Please check your API key.
+            <p className="font-semibold mb-2">Error loading Google Maps</p>
+            <p className="text-sm mb-3">Please check that:</p>
+            <ul className="list-disc list-inside text-sm space-y-1">
+              <li>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is set in your .env.local file</li>
+              <li>The API key has "Maps JavaScript API" and "Places API" enabled</li>
+              <li>The API key has no domain restrictions blocking localhost</li>
+            </ul>
           </div>
         </div>
       </div>
@@ -535,6 +545,28 @@ export default function AdminPage() {
                     placeholder='e.g., "Back hallway near kitchen"'
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
                   />
+                </div>
+
+                {/* Tips / Safety Notes */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    💡 Tips / Notes (optional)
+                  </label>
+                  <textarea
+                    value={restroomForm.safety_notes}
+                    onChange={(e) =>
+                      setRestroomForm((prev) => ({
+                        ...prev,
+                        safety_notes: e.target.value,
+                      }))
+                    }
+                    placeholder='e.g., "Ask staff for diaper station key" or "Gets crowded after 5pm"'
+                    rows={2}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none resize-none"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Tips will appear in a yellow box on the venue detail page
+                  </p>
                 </div>
 
                 {/* Status */}

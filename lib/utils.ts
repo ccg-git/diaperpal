@@ -96,6 +96,29 @@ export function formatTime(time: string): string {
   return `${displayHour}:${minutes.toString().padStart(2, '0')} ${period}`
 }
 
+/**
+ * Get formatted hours for all days of the week
+ */
+export function getFormattedWeeklyHours(hoursJson: HoursJson | null): Array<{ day: string; hours: string; isToday: boolean }> {
+  const { day: currentDay } = getPacificTime()
+  const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+  const dayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+
+  return dayNames.map((dayName, index) => {
+    const dayKey = dayKeys[index] as keyof HoursJson
+    const dayHours = hoursJson?.[dayKey]
+    const isToday = currentDay === dayKey
+
+    return {
+      day: dayName,
+      hours: dayHours
+        ? `${formatTime(dayHours.open)} - ${formatTime(dayHours.close)}`
+        : 'Closed',
+      isToday,
+    }
+  })
+}
+
 // ============================================
 // Venue Type Helpers
 // ============================================
