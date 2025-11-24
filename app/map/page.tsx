@@ -53,8 +53,9 @@ export default function MapPage() {
   const [genderFilter, setGenderFilter] = useState<Gender | null>(null)
   const [selectedVenueTypes, setSelectedVenueTypes] = useState<Set<VenueType>>(new Set())
 
-  // Check if Mapbox token is available
-  const hasMapboxToken = typeof window !== 'undefined' && !!process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+  // Check if Mapbox token is available (NEXT_PUBLIC_ vars are inlined at build time)
+  const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+  const hasMapboxToken = !!mapboxToken && mapboxToken.length > 0 && mapboxToken !== 'undefined'
 
   useEffect(() => {
     if (navigator.geolocation) {
