@@ -2,24 +2,47 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Gender, StationLocation, VerificationStatus } from '@/lib/types'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+// Check for required environment variables
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+// Only create client if we have credentials
+const supabase = supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey)
+  : null
 
 // Verify admin password
 function isAuthorized(request: NextRequest): boolean {
+  const adminPassword = process.env.ADMIN_PASSWORD
+
+  // If no admin password is set, deny all access
+  if (!adminPassword) {
+    console.error('ADMIN_PASSWORD environment variable is not set')
+    return false
+  }
+
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) return false
 
   const password = authHeader.substring(7)
-  return password === process.env.ADMIN_PASSWORD
+  return password === adminPassword
 }
 
 export async function POST(request: NextRequest) {
+  // Check if Supabase is configured
+  if (!supabase) {
+    return NextResponse.json(
+      { error: 'Database not configured. Check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.' },
+      { status: 500 }
+    )
+  }
+
   // Check authorization
   if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json(
+      { error: 'Unauthorized. Check that ADMIN_PASSWORD is set in environment variables.' },
+      { status: 401 }
+    )
   }
 
   try {
@@ -116,6 +139,14 @@ export async function POST(request: NextRequest) {
 
 // GET - List restrooms for a venue
 export async function GET(request: NextRequest) {
+  // Check if Supabase is configured
+  if (!supabase) {
+    return NextResponse.json(
+      { error: 'Database not configured. Check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.' },
+      { status: 500 }
+    )
+  }
+
   const venueId = request.nextUrl.searchParams.get('venue_id')
 
   if (!venueId) {

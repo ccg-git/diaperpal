@@ -60,6 +60,7 @@ export default function AdminPage() {
   // Stats
   const [stats, setStats] = useState<Stats | null>(null)
   const [statsLoading, setStatsLoading] = useState(false)
+  const [statsError, setStatsError] = useState('')
 
   // Venue state (Add Venue tab)
   const [selectedPlace, setSelectedPlace] = useState<google.maps.places.PlaceResult | null>(null)
@@ -123,6 +124,7 @@ export default function AdminPage() {
 
   async function fetchStats() {
     setStatsLoading(true)
+    setStatsError('')
     try {
       const res = await fetch('/api/admin/stats', {
         headers: { Authorization: `Bearer ${password}` },
@@ -130,9 +132,16 @@ export default function AdminPage() {
       if (res.ok) {
         const data = await res.json()
         setStats(data)
+      } else if (res.status === 401) {
+        setStatsError('Session expired. Please log in again.')
+        handleLogout()
+      } else {
+        const errorData = await res.json().catch(() => ({}))
+        setStatsError(errorData.error || 'Failed to load stats')
       }
     } catch (error) {
       console.error('Error fetching stats:', error)
+      setStatsError('Failed to connect to server')
     } finally {
       setStatsLoading(false)
     }
@@ -155,11 +164,31 @@ export default function AdminPage() {
     }
   }
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    document.cookie = `admin_password=${password}; path=/; max-age=86400`
-    setIsAuthenticated(true)
     setAuthError('')
+
+    // Verify password by making a test API call
+    try {
+      const res = await fetch('/api/admin/stats', {
+        headers: { Authorization: `Bearer ${password}` },
+      })
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          setAuthError('Invalid password. Please check your credentials.')
+        } else {
+          setAuthError(`Login failed: ${res.statusText}`)
+        }
+        return
+      }
+
+      // Password is valid - save it and authenticate
+      document.cookie = `admin_password=${password}; path=/; max-age=86400`
+      setIsAuthenticated(true)
+    } catch (error) {
+      setAuthError('Failed to connect to server. Please try again.')
+    }
   }
 
   function handleLogout() {
@@ -264,6 +293,12 @@ export default function AdminPage() {
     setRestroomError('')
     setRestroomSuccess(false)
 
+    // Map form fields to API expected fields
+    const safetyNotes = [
+      restroomForm.has_safety_concern ? restroomForm.safety_concern_notes : '',
+      restroomForm.has_cleanliness_issue ? `Cleanliness: ${restroomForm.cleanliness_issue_notes}` : '',
+    ].filter(Boolean).join(' | ') || null
+
     try {
       const res = await fetch('/api/admin/restrooms', {
         method: 'POST',
@@ -273,7 +308,12 @@ export default function AdminPage() {
         },
         body: JSON.stringify({
           venue_id: targetVenueId,
-          ...restroomForm,
+          gender: restroomForm.gender,
+          station_location: restroomForm.station_location,
+          restroom_location_text: restroomForm.restroom_location_text || null,
+          status: restroomForm.status,
+          safety_notes: safetyNotes,
+          admin_notes: restroomForm.additional_notes || null,
         }),
       })
 
@@ -390,6 +430,14 @@ export default function AdminPage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-6">
+        {/* Stats Error */}
+        {statsError && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
+            <p className="font-semibold">Error loading dashboard</p>
+            <p className="text-sm">{statsError}</p>
+          </div>
+        )}
+
         {/* Stats Dashboard */}
         <div className="grid grid-cols-3 gap-4 mb-8">
           <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
