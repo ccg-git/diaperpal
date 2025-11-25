@@ -19,7 +19,13 @@ interface RestroomForm {
   station_location: StationLocation
   restroom_location_text: string
   status: VerificationStatus
-  safety_notes: string
+  // Issue tracking
+  has_safety_concern: boolean
+  safety_concern_notes: string
+  has_cleanliness_issue: boolean
+  cleanliness_issue_notes: string
+  // Tips like "ask for key"
+  additional_notes: string
 }
 
 interface CreatedRestroom extends RestroomForm {
@@ -76,7 +82,11 @@ export default function AdminPage() {
     station_location: 'single_restroom',
     restroom_location_text: '',
     status: 'verified_present',
-    safety_notes: '',
+    has_safety_concern: false,
+    safety_concern_notes: '',
+    has_cleanliness_issue: false,
+    cleanliness_issue_notes: '',
+    additional_notes: '',
   })
   const [restroomLoading, setRestroomLoading] = useState(false)
   const [restroomError, setRestroomError] = useState('')
@@ -173,7 +183,11 @@ export default function AdminPage() {
       station_location: 'single_restroom',
       restroom_location_text: '',
       status: 'verified_present',
-      safety_notes: '',
+      has_safety_concern: false,
+      safety_concern_notes: '',
+      has_cleanliness_issue: false,
+      cleanliness_issue_notes: '',
+      additional_notes: '',
     })
     setRestroomSuccess(false)
     setRestroomError('')
@@ -279,7 +293,11 @@ export default function AdminPage() {
         station_location: 'single_restroom',
         restroom_location_text: '',
         status: 'verified_present',
-        safety_notes: '',
+        has_safety_concern: false,
+        safety_concern_notes: '',
+        has_cleanliness_issue: false,
+        cleanliness_issue_notes: '',
+        additional_notes: '',
       })
 
       setRestroomSuccess(true)
@@ -816,25 +834,97 @@ function RestroomFormComponent({
             />
           </div>
 
-          {/* Tips / Safety Notes */}
+          {/* Safety Concern Checkbox */}
+          <div className="mb-4">
+            <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition">
+              <input
+                type="checkbox"
+                checked={restroomForm.has_safety_concern}
+                onChange={(e) =>
+                  setRestroomForm((prev) => ({
+                    ...prev,
+                    has_safety_concern: e.target.checked,
+                    safety_concern_notes: e.target.checked ? prev.safety_concern_notes : '',
+                  }))
+                }
+                className="w-5 h-5 text-amber-500 border-gray-300 rounded focus:ring-amber-500"
+              />
+              <div>
+                <span className="font-medium text-gray-900">⚠️ Safety Concern</span>
+                <p className="text-xs text-gray-500">Check if there's a safety issue (broken strap, etc.)</p>
+              </div>
+            </label>
+            {restroomForm.has_safety_concern && (
+              <textarea
+                value={restroomForm.safety_concern_notes}
+                onChange={(e) =>
+                  setRestroomForm((prev) => ({
+                    ...prev,
+                    safety_concern_notes: e.target.value,
+                  }))
+                }
+                placeholder="Describe the safety concern..."
+                rows={2}
+                className="w-full mt-2 px-4 py-3 border border-amber-300 bg-amber-50 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none"
+              />
+            )}
+          </div>
+
+          {/* Cleanliness Issue Checkbox */}
+          <div className="mb-4">
+            <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition">
+              <input
+                type="checkbox"
+                checked={restroomForm.has_cleanliness_issue}
+                onChange={(e) =>
+                  setRestroomForm((prev) => ({
+                    ...prev,
+                    has_cleanliness_issue: e.target.checked,
+                    cleanliness_issue_notes: e.target.checked ? prev.cleanliness_issue_notes : '',
+                  }))
+                }
+                className="w-5 h-5 text-amber-500 border-gray-300 rounded focus:ring-amber-500"
+              />
+              <div>
+                <span className="font-medium text-gray-900">🧹 Cleanliness Issue</span>
+                <p className="text-xs text-gray-500">Check if there's a cleanliness problem</p>
+              </div>
+            </label>
+            {restroomForm.has_cleanliness_issue && (
+              <textarea
+                value={restroomForm.cleanliness_issue_notes}
+                onChange={(e) =>
+                  setRestroomForm((prev) => ({
+                    ...prev,
+                    cleanliness_issue_notes: e.target.value,
+                  }))
+                }
+                placeholder="Describe the cleanliness issue..."
+                rows={2}
+                className="w-full mt-2 px-4 py-3 border border-amber-300 bg-amber-50 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none"
+              />
+            )}
+          </div>
+
+          {/* Tips / Notes (Always visible) */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               💡 Tips / Notes (optional)
             </label>
             <textarea
-              value={restroomForm.safety_notes}
+              value={restroomForm.additional_notes}
               onChange={(e) =>
                 setRestroomForm((prev) => ({
                   ...prev,
-                  safety_notes: e.target.value,
+                  additional_notes: e.target.value,
                 }))
               }
-              placeholder='e.g., "Ask staff for diaper station key" or "Gets crowded after 5pm"'
+              placeholder='e.g., "Ask staff for key" or "Near the back patio"'
               rows={2}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none resize-none"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Tips will appear in a yellow box on the venue detail page
+              Helpful tips for finding/using the changing station
             </p>
           </div>
 

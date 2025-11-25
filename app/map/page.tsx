@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useJsApiLoader, Autocomplete } from '@react-google-maps/api'
 import {
   VenueType,
   Gender,
@@ -9,8 +10,11 @@ import {
   VENUE_TYPE_CONFIG,
   GENDER_CONFIG,
   STATION_LOCATION_CONFIG,
+  STATUS_CONFIG,
 } from '@/lib/types'
 import { formatTime } from '@/lib/utils'
+
+const libraries: ('places')[] = ['places']
 
 interface NearbyVenue {
   id: string
@@ -36,28 +40,90 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null)
   const [locationName, setLocationName] = useState('Finding location...')
 
+  // Location search
+  const [showLocationSearch, setShowLocationSearch] = useState(false)
+  const [isUsingCurrentLocation, setIsUsingCurrentLocation] = useState(true)
+  const [currentCoords, setCurrentCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+
   // Filters
   const [genderFilter, setGenderFilter] = useState<Gender | null>(null)
   const [selectedVenueTypes, setSelectedVenueTypes] = useState<Set<VenueType>>(new Set())
+  const [showClosed, setShowClosed] = useState(false)
+
+  // Load Google Maps API
+  const { isLoaded } = useJsApiLoader({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+    libraries,
+  })
 
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords
-          setLocationName('Manhattan Beach, CA') // TODO: Reverse geocode
+          setLocationName('Current Location')
+          setCurrentCoords({ lat: latitude, lng: longitude })
+          setIsUsingCurrentLocation(true)
           fetchNearbyVenues(latitude, longitude)
         },
         () => {
           setLocationName('Manhattan Beach, CA')
+          setCurrentCoords({ lat: 33.8845, lng: -118.3976 })
+          setIsUsingCurrentLocation(true)
           fetchNearbyVenues(33.8845, -118.3976)
         }
       )
     } else {
       setLocationName('Manhattan Beach, CA')
+      setCurrentCoords({ lat: 33.8845, lng: -118.3976 })
+      setIsUsingCurrentLocation(true)
       fetchNearbyVenues(33.8845, -118.3976)
     }
   }, [])
+
+  const onAutocompleteLoad = useCallback((autocomplete: google.maps.places.Autocomplete) => {
+    autocompleteRef.current = autocomplete
+  }, [])
+
+  const onPlaceChanged = useCallback(() => {
+    const place = autocompleteRef.current?.getPlace()
+    if (place?.geometry?.location) {
+      const lat = place.geometry.location.lat()
+      const lng = place.geometry.location.lng()
+
+      // Get a friendly name for the location
+      const name = place.name || place.formatted_address?.split(',')[0] || 'Selected Location'
+
+      setLocationName(name)
+      setCurrentCoords({ lat, lng })
+      setIsUsingCurrentLocation(false)
+      setShowLocationSearch(false)
+      fetchNearbyVenues(lat, lng)
+    }
+  }, [])
+
+  function returnToCurrentLocation() {
+    setLoading(true)
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords
+          setLocationName('Current Location')
+          setCurrentCoords({ lat: latitude, lng: longitude })
+          setIsUsingCurrentLocation(true)
+          fetchNearbyVenues(latitude, longitude)
+        },
+        () => {
+          setLocationName('Manhattan Beach, CA')
+          setCurrentCoords({ lat: 33.8845, lng: -118.3976 })
+          setIsUsingCurrentLocation(true)
+          fetchNearbyVenues(33.8845, -118.3976)
+        }
+      )
+    }
+  }
 
   async function fetchNearbyVenues(lat: number, lng: number) {
     try {
@@ -89,11 +155,24 @@ export default function MapPage() {
     })
   }
 
+  function clearFilters() {
+    setGenderFilter(null)
+    setSelectedVenueTypes(new Set())
+  }
+
+  const hasActiveFilters = genderFilter !== null || selectedVenueTypes.size > 0
+
   // Filter venues
   const filteredVenues = venues.filter((venue) => {
+    // Open/closed filter
+    if (!showClosed && !venue.is_open) {
+      return false
+    }
+    // Venue type filter
     if (selectedVenueTypes.size > 0 && !selectedVenueTypes.has(venue.venue_type)) {
       return false
     }
+    // Gender filter
     if (genderFilter) {
       const hasMatch = venue.restrooms.some(
         (r) => r.gender === genderFilter || r.gender === 'all_gender'
@@ -102,6 +181,25 @@ export default function MapPage() {
     }
     return true
   })
+
+  // Count open venues for the banner
+  const openVenuesCount = venues.filter((v) => {
+    if (selectedVenueTypes.size > 0 && !selectedVenueTypes.has(v.venue_type)) return false
+    if (genderFilter) {
+      const hasMatch = v.restrooms.some((r) => r.gender === genderFilter || r.gender === 'all_gender')
+      if (!hasMatch) return false
+    }
+    return v.is_open
+  }).length
+
+  const totalMatchingVenues = venues.filter((v) => {
+    if (selectedVenueTypes.size > 0 && !selectedVenueTypes.has(v.venue_type)) return false
+    if (genderFilter) {
+      const hasMatch = v.restrooms.some((r) => r.gender === genderFilter || r.gender === 'all_gender')
+      if (!hasMatch) return false
+    }
+    return true
+  }).length
 
   // Get display restrooms based on filter
   function getDisplayRestrooms(restrooms: RestroomWithPhotos[]) {
@@ -128,61 +226,218 @@ export default function MapPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">🍼</span>
-          <h1 className="text-xl font-bold text-teal-600">DiaperPal</h1>
+      <header className="sticky top-0 z-20 bg-white border-b border-gray-200 px-4 py-3">
+        <div className="flex items-center justify-between">
+          {/* Logo */}
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🍼</span>
+            <h1 className="text-xl font-bold text-teal-600">DiaperPal</h1>
+          </div>
+
+          {/* View Toggle Pills */}
+          <div className="flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setView('list')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition ${
+                view === 'list'
+                  ? 'bg-white text-teal-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <span>📋</span>
+              <span>List</span>
+            </button>
+            <button
+              onClick={() => setView('map')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition ${
+                view === 'map'
+                  ? 'bg-white text-teal-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <span>🗺️</span>
+              <span>Map</span>
+            </button>
+          </div>
         </div>
-        <p className="text-sm text-gray-500 mt-1">📍 {locationName}</p>
+
+        {/* Location Bar */}
+        <button
+          onClick={() => setShowLocationSearch(true)}
+          className="mt-2 flex items-center text-sm text-gray-600 hover:text-teal-600 transition w-full"
+        >
+          <span className="text-teal-600">📍</span>
+          <span className="ml-1 flex-1 text-left">{locationName}</span>
+          {!isUsingCurrentLocation && (
+            <span
+              onClick={(e) => {
+                e.stopPropagation()
+                returnToCurrentLocation()
+              }}
+              className="text-gray-400 hover:text-gray-600 px-2"
+              title="Return to current location"
+            >
+              ×
+            </span>
+          )}
+          <span className="text-gray-400 text-xs">Change</span>
+        </button>
       </header>
+
+      {/* Location Search Modal */}
+      {showLocationSearch && isLoaded && (
+        <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setShowLocationSearch(false)}>
+          <div
+            className="absolute top-0 left-0 right-0 bg-white shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4">
+              <div className="flex items-center gap-3 mb-4">
+                <button
+                  onClick={() => setShowLocationSearch(false)}
+                  className="text-gray-500 hover:text-gray-700 text-xl"
+                >
+                  ←
+                </button>
+                <h2 className="text-lg font-semibold text-gray-900">Search Location</h2>
+              </div>
+
+              <Autocomplete
+                onLoad={onAutocompleteLoad}
+                onPlaceChanged={onPlaceChanged}
+                options={{
+                  componentRestrictions: { country: 'us' },
+                  types: ['geocode', 'establishment'],
+                }}
+              >
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search for a city, address, or place..."
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none text-base"
+                  autoFocus
+                />
+              </Autocomplete>
+
+              <button
+                onClick={() => {
+                  returnToCurrentLocation()
+                  setShowLocationSearch(false)
+                }}
+                className="mt-4 w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 rounded-lg transition"
+              >
+                <span className="text-teal-600 text-xl">📍</span>
+                <div>
+                  <p className="font-medium text-gray-900">Use Current Location</p>
+                  <p className="text-sm text-gray-500">Find venues near you</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 space-y-3">
-        {/* Gender Filter Row */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          <button
-            onClick={() => toggleGender('womens')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium text-sm whitespace-nowrap transition ${
-              genderFilter === 'womens'
-                ? 'bg-teal-600 text-white'
-                : 'bg-white border border-gray-300 text-gray-700'
-            }`}
-          >
-            👩 Women's
-          </button>
-          <button
-            onClick={() => toggleGender('mens')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium text-sm whitespace-nowrap transition ${
-              genderFilter === 'mens'
-                ? 'bg-teal-600 text-white'
-                : 'bg-white border border-gray-300 text-gray-700'
-            }`}
-          >
-            👨 Men's
-          </button>
+        {/* Restroom Type Label + Chips */}
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Restroom Type
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {(Object.entries(GENDER_CONFIG) as [Gender, { emoji: string; label: string }][]).map(
+              ([gender, config]) => (
+                <button
+                  key={gender}
+                  onClick={() => toggleGender(gender)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-full font-medium text-sm whitespace-nowrap transition border-2 ${
+                    genderFilter === gender
+                      ? 'bg-teal-600 border-teal-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-700 hover:border-teal-600'
+                  }`}
+                >
+                  {config.emoji} {config.label}
+                </button>
+              )
+            )}
+          </div>
         </div>
 
-        {/* Venue Type Filter Row */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {(Object.entries(VENUE_TYPE_CONFIG) as [VenueType, { emoji: string; label: string }][]).map(
-            ([type, config]) => (
-              <button
-                key={type}
-                onClick={() => toggleVenueType(type)}
-                className={`flex items-center gap-1 px-3 py-2 rounded-full font-medium text-sm whitespace-nowrap transition ${
-                  selectedVenueTypes.has(type)
-                    ? 'bg-teal-600 text-white'
-                    : 'bg-white border border-gray-300 text-gray-700'
-                }`}
-              >
-                {config.emoji} {config.label}
-              </button>
-            )
-          )}
+        {/* Venue Type Label + Chips */}
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Venue Type
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {(Object.entries(VENUE_TYPE_CONFIG) as [VenueType, { emoji: string; label: string }][]).map(
+              ([type, config]) => (
+                <button
+                  key={type}
+                  onClick={() => toggleVenueType(type)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-full font-medium text-sm whitespace-nowrap transition border-2 ${
+                    selectedVenueTypes.has(type)
+                      ? 'bg-teal-600 border-teal-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-700 hover:border-teal-600'
+                  }`}
+                >
+                  {config.emoji} {config.label}
+                </button>
+              )
+            )}
+          </div>
         </div>
+
+        {/* Clear Filters Button */}
+        {hasActiveFilters && (
+          <div className="flex justify-center pt-1">
+            <button
+              onClick={clearFilters}
+              className="text-sm text-gray-500 hover:text-gray-700 font-medium"
+            >
+              × Clear Filters
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Open/Closed Toggle Banner */}
+      {!loading && !error && venues.length > 0 && (
+        <div className="mx-4 mt-4">
+          <div className="bg-blue-50 border-l-4 border-blue-500 rounded-r-lg px-4 py-3">
+            <div className="flex items-center justify-between text-sm">
+              {showClosed ? (
+                <>
+                  <span className="text-blue-800">
+                    Showing all {totalMatchingVenues} venue{totalMatchingVenues !== 1 ? 's' : ''}
+                  </span>
+                  <button
+                    onClick={() => setShowClosed(false)}
+                    className="text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Show only open
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-blue-800">
+                    Showing {openVenuesCount} open venue{openVenuesCount !== 1 ? 's' : ''}
+                  </span>
+                  {totalMatchingVenues > openVenuesCount && (
+                    <button
+                      onClick={() => setShowClosed(true)}
+                      className="text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Show all {totalMatchingVenues} including closed
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="p-4">
@@ -200,11 +455,13 @@ export default function MapPage() {
         )}
 
         {!loading && !error && view === 'list' && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {filteredVenues.length === 0 ? (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-800 text-center">
                 {venues.length === 0
                   ? 'No venues found nearby. Check back soon!'
+                  : openVenuesCount === 0 && !showClosed
+                  ? 'No open venues match your filters. Try showing closed venues.'
                   : 'No venues match your filters.'}
               </div>
             ) : (
@@ -215,82 +472,92 @@ export default function MapPage() {
                   <div
                     key={venue.id}
                     onClick={() => router.push(`/location/${venue.id}`)}
-                    className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition"
+                    className="bg-white rounded-xl border-2 border-gray-200 p-4 cursor-pointer hover:border-teal-400 hover:shadow-md transition group"
                   >
-                    {/* Header Row */}
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1 min-w-0 pr-4">
-                        <h3 className="font-bold text-lg text-gray-900">{venue.name}</h3>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-0.5">
-                          {VENUE_TYPE_CONFIG[venue.venue_type]?.emoji} {venue.venue_type.replace('_', ' & ').replace('_', ' ')}
-                        </p>
-                        {venue.rating && (
-                          <p className="text-sm text-gray-600 mt-1">
-                            ⭐ {venue.rating} ({venue.review_count} reviews)
-                          </p>
-                        )}
+                    {/* Row 1: Venue Name + Distance Badge */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xl flex-shrink-0">
+                          {VENUE_TYPE_CONFIG[venue.venue_type]?.emoji}
+                        </span>
+                        <h3 className="font-bold text-lg text-gray-900 truncate">
+                          {venue.name}
+                        </h3>
                       </div>
-                      <span className="text-2xl font-bold text-teal-600">
-                        {venue.distance_display}
+                      <span className="flex-shrink-0 bg-teal-100 text-teal-700 font-semibold text-sm px-2.5 py-1 rounded-full">
+                        📍 {venue.distance_display}
                       </span>
+                    </div>
+
+                    {/* Row 2: Category + Open/Closed Status */}
+                    <div className="mt-1 flex items-center gap-2 text-sm">
+                      <span className="text-gray-500">
+                        {VENUE_TYPE_CONFIG[venue.venue_type]?.label}
+                      </span>
+                      <span className="text-gray-300">·</span>
+                      {venue.is_open ? (
+                        <span className="text-green-600 font-medium flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                          Open
+                          {venue.hours_today && (
+                            <span className="text-gray-500 font-normal">
+                              until {formatTime(venue.hours_today.close)}
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-red-500 font-medium flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+                          Closed
+                          {venue.hours_today && (
+                            <span className="text-gray-500 font-normal">
+                              · Opens {formatTime(venue.hours_today.open)}
+                            </span>
+                          )}
+                        </span>
+                      )}
                     </div>
 
                     {/* Restrooms */}
                     <div className="mt-3 space-y-2">
                       {displayRestrooms.map((restroom) => (
-                        <div key={restroom.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                          <div className="flex items-center gap-2">
+                        <div
+                          key={restroom.id}
+                          className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2"
+                        >
+                          <div className="flex items-center gap-2 text-sm">
                             <span>{GENDER_CONFIG[restroom.gender]?.emoji}</span>
                             <span className="font-medium text-gray-900">
-                              {GENDER_CONFIG[restroom.gender]?.label} Restroom
+                              {GENDER_CONFIG[restroom.gender]?.label}
+                            </span>
+                            <span className="text-gray-300">·</span>
+                            <span className="text-gray-600">
+                              {STATION_LOCATION_CONFIG[restroom.station_location]?.emoji}{' '}
+                              {STATION_LOCATION_CONFIG[restroom.station_location]?.label}
                             </span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded">
-                              {STATION_LOCATION_CONFIG[restroom.station_location]?.emoji} {STATION_LOCATION_CONFIG[restroom.station_location]?.label}
-                            </span>
-                            {restroom.status === 'verified_present' && (
-                              <span className="text-green-600">✅</span>
+                          <span>
+                            {restroom.status === 'verified_present' ? (
+                              <span className="text-green-600" title="Verified">✅</span>
+                            ) : (
+                              <span className="text-gray-400 text-xs">❓</span>
                             )}
-                            {restroom.status === 'unverified' && (
-                              <span className="text-gray-400 text-xs">? Unverified</span>
-                            )}
-                          </div>
+                          </span>
                         </div>
                       ))}
                     </div>
 
-                    {/* Footer */}
+                    {/* Footer: Directions Button + Chevron */}
                     <div className="mt-4 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {venue.is_open ? (
-                          <>
-                            <span className="w-2 h-2 bg-green-500 rounded-full" />
-                            <span className="text-green-600 font-medium text-sm">Open</span>
-                            {venue.hours_today && (
-                              <span className="text-gray-500 text-sm">
-                                until {formatTime(venue.hours_today.close)}
-                              </span>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <span className="w-2 h-2 bg-red-500 rounded-full" />
-                            <span className="text-red-500 font-medium text-sm">Closed</span>
-                            {venue.hours_today && (
-                              <span className="text-gray-500 text-sm">
-                                Opens {formatTime(venue.hours_today.open)}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </div>
                       <button
                         onClick={(e) => handleDirections(venue, e)}
-                        className="bg-teal-600 hover:bg-teal-700 text-white font-semibold px-6 py-2.5 rounded-lg transition flex items-center gap-2"
+                        className="bg-teal-600 hover:bg-teal-700 text-white font-semibold px-5 py-2.5 rounded-lg transition flex items-center gap-2 text-sm"
                       >
                         🧭 Directions
                       </button>
+                      <span className="text-gray-400 group-hover:text-teal-600 transition text-xl">
+                        →
+                      </span>
                     </div>
                   </div>
                 )
@@ -357,30 +624,34 @@ export default function MapPage() {
                   onClick={() => router.push(`/location/${filteredVenues[0].id}`)}
                 >
                   <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="font-bold text-lg text-gray-900">
-                        {filteredVenues[0].name}
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-0.5">
-                        {VENUE_TYPE_CONFIG[filteredVenues[0].venue_type]?.emoji}{' '}
-                        {VENUE_TYPE_CONFIG[filteredVenues[0].venue_type]?.label}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">
+                        {VENUE_TYPE_CONFIG[filteredVenues[0].venue_type]?.emoji}
+                      </span>
+                      <div>
+                        <h3 className="font-bold text-gray-900">
+                          {filteredVenues[0].name}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {VENUE_TYPE_CONFIG[filteredVenues[0].venue_type]?.label}
+                        </p>
+                      </div>
                     </div>
-                    <span className="text-xl font-bold text-teal-600">
-                      {filteredVenues[0].distance_display}
+                    <span className="bg-teal-100 text-teal-700 font-semibold text-sm px-2.5 py-1 rounded-full">
+                      📍 {filteredVenues[0].distance_display}
                     </span>
                   </div>
                   <div className="mt-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 text-sm">
                       {filteredVenues[0].is_open ? (
                         <>
                           <span className="w-2 h-2 bg-green-500 rounded-full" />
-                          <span className="text-green-600 text-sm font-medium">Open</span>
+                          <span className="text-green-600 font-medium">Open</span>
                         </>
                       ) : (
                         <>
                           <span className="w-2 h-2 bg-red-500 rounded-full" />
-                          <span className="text-red-500 text-sm font-medium">Closed</span>
+                          <span className="text-red-500 font-medium">Closed</span>
                         </>
                       )}
                     </div>
@@ -397,30 +668,6 @@ export default function MapPage() {
           </div>
         )}
       </div>
-
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200">
-        <div className="flex">
-          <button
-            onClick={() => setView('list')}
-            className={`flex-1 py-4 flex flex-col items-center gap-1 ${
-              view === 'list' ? 'text-teal-600' : 'text-gray-500'
-            }`}
-          >
-            <span className="text-2xl">📋</span>
-            <span className="text-xs font-medium">List</span>
-          </button>
-          <button
-            onClick={() => setView('map')}
-            className={`flex-1 py-4 flex flex-col items-center gap-1 ${
-              view === 'map' ? 'text-teal-600' : 'text-gray-500'
-            }`}
-          >
-            <span className="text-2xl">🗺️</span>
-            <span className="text-xs font-medium">Map</span>
-          </button>
-        </div>
-      </nav>
     </div>
   )
 }
