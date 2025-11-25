@@ -174,3 +174,162 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+// PUT - Update an existing restroom
+export async function PUT(request: NextRequest) {
+  // Check if Supabase is configured
+  if (!supabase) {
+    return NextResponse.json(
+      { error: 'Database not configured. Check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.' },
+      { status: 500 }
+    )
+  }
+
+  // Check authorization
+  if (!isAuthorized(request)) {
+    return NextResponse.json(
+      { error: 'Unauthorized. Check that ADMIN_PASSWORD is set in environment variables.' },
+      { status: 401 }
+    )
+  }
+
+  try {
+    const body = await request.json()
+    const {
+      id,
+      gender,
+      station_location,
+      restroom_location_text,
+      status,
+      safety_notes,
+      admin_notes,
+    } = body
+
+    // Validate required fields
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Restroom id is required' },
+        { status: 400 }
+      )
+    }
+
+    // Build update object with only provided fields
+    const updateData: Record<string, unknown> = {}
+
+    if (gender !== undefined) {
+      const validGenders: Gender[] = ['mens', 'womens', 'all_gender']
+      if (!validGenders.includes(gender)) {
+        return NextResponse.json(
+          { error: `Invalid gender. Must be one of: ${validGenders.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      updateData.gender = gender
+    }
+
+    if (station_location !== undefined) {
+      const validLocations: StationLocation[] = ['single_restroom', 'inside_stall', 'near_sinks']
+      if (!validLocations.includes(station_location)) {
+        return NextResponse.json(
+          { error: `Invalid station_location. Must be one of: ${validLocations.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      updateData.station_location = station_location
+    }
+
+    if (status !== undefined) {
+      const validStatuses: VerificationStatus[] = ['verified_present', 'verified_absent', 'unverified']
+      if (!validStatuses.includes(status)) {
+        return NextResponse.json(
+          { error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      updateData.status = status
+      // Update verified_at timestamp when status changes to verified_present or verified_absent
+      if (status === 'verified_present' || status === 'verified_absent') {
+        updateData.verified_at = new Date().toISOString()
+      }
+    }
+
+    if (restroom_location_text !== undefined) {
+      updateData.restroom_location_text = restroom_location_text || null
+    }
+
+    if (safety_notes !== undefined) {
+      updateData.safety_notes = safety_notes || null
+    }
+
+    if (admin_notes !== undefined) {
+      updateData.admin_notes = admin_notes || null
+    }
+
+    // Update restroom
+    const { data: restroom, error: updateError } = await supabase
+      .from('restrooms')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (updateError) {
+      console.error('Error updating restroom:', updateError)
+      return NextResponse.json({ error: 'Failed to update restroom' }, { status: 500 })
+    }
+
+    if (!restroom) {
+      return NextResponse.json({ error: 'Restroom not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      restroom,
+    })
+  } catch (error) {
+    console.error('Error in admin restrooms PUT:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+// DELETE - Delete a restroom
+export async function DELETE(request: NextRequest) {
+  // Check if Supabase is configured
+  if (!supabase) {
+    return NextResponse.json(
+      { error: 'Database not configured. Check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.' },
+      { status: 500 }
+    )
+  }
+
+  // Check authorization
+  if (!isAuthorized(request)) {
+    return NextResponse.json(
+      { error: 'Unauthorized. Check that ADMIN_PASSWORD is set in environment variables.' },
+      { status: 401 }
+    )
+  }
+
+  const id = request.nextUrl.searchParams.get('id')
+
+  if (!id) {
+    return NextResponse.json({ error: 'Restroom id is required' }, { status: 400 })
+  }
+
+  try {
+    const { error: deleteError } = await supabase
+      .from('restrooms')
+      .delete()
+      .eq('id', id)
+
+    if (deleteError) {
+      console.error('Error deleting restroom:', deleteError)
+      return NextResponse.json({ error: 'Failed to delete restroom' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error in admin restrooms DELETE:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

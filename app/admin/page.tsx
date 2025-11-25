@@ -32,6 +32,17 @@ interface CreatedRestroom extends RestroomForm {
   id: string
 }
 
+interface ExistingRestroom {
+  id: string
+  gender: Gender
+  station_location: StationLocation
+  restroom_location_text: string | null
+  status: VerificationStatus
+  safety_notes: string | null
+  admin_notes: string | null
+  created_at: string
+}
+
 interface Stats {
   totalVenues: number
   totalRestrooms: number
@@ -78,6 +89,9 @@ export default function AdminPage() {
 
   // Restroom state
   const [restrooms, setRestrooms] = useState<CreatedRestroom[]>([])
+  const [existingRestrooms, setExistingRestrooms] = useState<ExistingRestroom[]>([])
+  const [existingRestroomsLoading, setExistingRestroomsLoading] = useState(false)
+  const [editingRestroomId, setEditingRestroomId] = useState<string | null>(null)
   const [restroomForm, setRestroomForm] = useState<RestroomForm>({
     gender: 'mens',
     station_location: 'single_restroom',
@@ -164,6 +178,83 @@ export default function AdminPage() {
     }
   }
 
+  async function fetchExistingRestrooms(venueId: string) {
+    setExistingRestroomsLoading(true)
+    try {
+      const res = await fetch(`/api/admin/restrooms?venue_id=${venueId}`, {
+        headers: { Authorization: `Bearer ${password}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setExistingRestrooms(data)
+      }
+    } catch (error) {
+      console.error('Error fetching restrooms:', error)
+    } finally {
+      setExistingRestroomsLoading(false)
+    }
+  }
+
+  function startEditingRestroom(restroom: ExistingRestroom) {
+    setEditingRestroomId(restroom.id)
+    // Parse safety_notes back into form fields if possible
+    const hasSafety = restroom.safety_notes?.includes('Safety:') || false
+    const hasCleanliness = restroom.safety_notes?.includes('Cleanliness:') || false
+
+    setRestroomForm({
+      gender: restroom.gender,
+      station_location: restroom.station_location,
+      restroom_location_text: restroom.restroom_location_text || '',
+      status: restroom.status,
+      has_safety_concern: hasSafety,
+      safety_concern_notes: hasSafety ? restroom.safety_notes?.split('|')[0]?.replace('Safety:', '').trim() || '' : '',
+      has_cleanliness_issue: hasCleanliness,
+      cleanliness_issue_notes: hasCleanliness ? restroom.safety_notes?.split('Cleanliness:')[1]?.trim() || '' : '',
+      additional_notes: restroom.admin_notes || '',
+    })
+  }
+
+  function cancelEditing() {
+    setEditingRestroomId(null)
+    setRestroomForm({
+      gender: 'mens',
+      station_location: 'single_restroom',
+      restroom_location_text: '',
+      status: 'verified_present',
+      has_safety_concern: false,
+      safety_concern_notes: '',
+      has_cleanliness_issue: false,
+      cleanliness_issue_notes: '',
+      additional_notes: '',
+    })
+  }
+
+  async function handleDeleteRestroom(restroomId: string) {
+    if (!confirm('Are you sure you want to delete this restroom?')) return
+
+    try {
+      const res = await fetch(`/api/admin/restrooms?id=${restroomId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${password}` },
+      })
+
+      if (res.ok) {
+        // Refresh the list
+        const targetVenueId = venueId || selectedExistingVenue?.id
+        if (targetVenueId) {
+          fetchExistingRestrooms(targetVenueId)
+        }
+        fetchStats()
+        fetchExistingVenues()
+      } else {
+        const data = await res.json()
+        setRestroomError(data.error || 'Failed to delete restroom')
+      }
+    } catch (error) {
+      setRestroomError('Failed to delete restroom')
+    }
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setAuthError('')
@@ -207,6 +298,8 @@ export default function AdminPage() {
     setVenueError('')
     setRestrooms([])
     setSelectedExistingVenue(null)
+    setExistingRestrooms([])
+    setEditingRestroomId(null)
     setRestroomForm({
       gender: 'mens',
       station_location: 'single_restroom',
@@ -287,7 +380,7 @@ export default function AdminPage() {
     e.preventDefault()
 
     const targetVenueId = venueId || selectedExistingVenue?.id
-    if (!targetVenueId) return
+    if (!targetVenueId && !editingRestroomId) return
 
     setRestroomLoading(true)
     setRestroomError('')
@@ -295,18 +388,28 @@ export default function AdminPage() {
 
     // Map form fields to API expected fields
     const safetyNotes = [
-      restroomForm.has_safety_concern ? restroomForm.safety_concern_notes : '',
+      restroomForm.has_safety_concern ? `Safety: ${restroomForm.safety_concern_notes}` : '',
       restroomForm.has_cleanliness_issue ? `Cleanliness: ${restroomForm.cleanliness_issue_notes}` : '',
     ].filter(Boolean).join(' | ') || null
 
     try {
+      // If editing, use PUT; otherwise use POST
+      const isEditing = !!editingRestroomId
       const res = await fetch('/api/admin/restrooms', {
-        method: 'POST',
+        method: isEditing ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${password}`,
         },
-        body: JSON.stringify({
+        body: JSON.stringify(isEditing ? {
+          id: editingRestroomId,
+          gender: restroomForm.gender,
+          station_location: restroomForm.station_location,
+          restroom_location_text: restroomForm.restroom_location_text || null,
+          status: restroomForm.status,
+          safety_notes: safetyNotes,
+          admin_notes: restroomForm.additional_notes || null,
+        } : {
           venue_id: targetVenueId,
           gender: restroomForm.gender,
           station_location: restroomForm.station_location,
@@ -320,13 +423,21 @@ export default function AdminPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to create restroom')
+        throw new Error(data.error || `Failed to ${isEditing ? 'update' : 'create'} restroom`)
       }
 
-      setRestrooms((prev) => [
-        ...prev,
-        { ...restroomForm, id: data.restroom_id },
-      ])
+      if (isEditing) {
+        // Refresh existing restrooms list
+        if (targetVenueId) {
+          fetchExistingRestrooms(targetVenueId)
+        }
+        setEditingRestroomId(null)
+      } else {
+        setRestrooms((prev) => [
+          ...prev,
+          { ...restroomForm, id: data.restroom_id },
+        ])
+      }
 
       setRestroomForm({
         gender: 'mens',
@@ -346,7 +457,7 @@ export default function AdminPage() {
 
       setTimeout(() => setRestroomSuccess(false), 3000)
     } catch (error) {
-      setRestroomError(error instanceof Error ? error.message : 'Failed to add restroom')
+      setRestroomError(error instanceof Error ? error.message : 'Failed to save restroom')
     } finally {
       setRestroomLoading(false)
     }
@@ -480,7 +591,7 @@ export default function AdminPage() {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            + Add Restroom
+            Add/Edit Restroom
           </button>
           <button
             onClick={() => { setActiveTab('browse'); resetForm(); }}
@@ -614,7 +725,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Add Restroom to Existing Venue Tab */}
+        {/* Add/Edit Restroom Tab */}
         {activeTab === 'add-restroom' && (
           <div className="space-y-6">
             {!selectedExistingVenue ? (
@@ -631,7 +742,10 @@ export default function AdminPage() {
                     {existingVenues.map((venue) => (
                       <button
                         key={venue.id}
-                        onClick={() => setSelectedExistingVenue(venue)}
+                        onClick={() => {
+                          setSelectedExistingVenue(venue)
+                          fetchExistingRestrooms(venue.id)
+                        }}
                         className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-teal-400 hover:bg-teal-50 transition"
                       >
                         <div className="flex items-center justify-between">
@@ -662,13 +776,95 @@ export default function AdminPage() {
                       </p>
                     </div>
                     <button
-                      onClick={() => setSelectedExistingVenue(null)}
+                      onClick={() => {
+                        setSelectedExistingVenue(null)
+                        setExistingRestrooms([])
+                        cancelEditing()
+                      }}
                       className="text-teal-600 hover:text-teal-700 text-sm font-medium"
                     >
-                      Change
+                      Change Venue
                     </button>
                   </div>
                 </div>
+
+                {/* Existing Restrooms List */}
+                {existingRestroomsLoading ? (
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <p className="text-gray-500">Loading restrooms...</p>
+                  </div>
+                ) : existingRestrooms.length > 0 && (
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <h3 className="font-semibold text-gray-900 mb-4">
+                      Existing Restrooms ({existingRestrooms.length})
+                    </h3>
+                    <div className="space-y-3">
+                      {existingRestrooms.map((restroom) => (
+                        <div
+                          key={restroom.id}
+                          className={`p-4 rounded-lg border transition ${
+                            editingRestroomId === restroom.id
+                              ? 'border-teal-400 bg-teal-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg">{GENDER_CONFIG[restroom.gender].emoji}</span>
+                              <div>
+                                <p className="font-medium text-gray-900">
+                                  {GENDER_CONFIG[restroom.gender].label} - {STATION_LOCATION_CONFIG[restroom.station_location].label}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className={`text-xs px-2 py-0.5 rounded ${
+                                    restroom.status === 'verified_present'
+                                      ? 'bg-green-100 text-green-700'
+                                      : restroom.status === 'verified_absent'
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-gray-100 text-gray-600'
+                                  }`}>
+                                    {restroom.status === 'verified_present' ? '✅ Verified Present' :
+                                     restroom.status === 'verified_absent' ? '❌ Verified Absent' : '❓ Unverified'}
+                                  </span>
+                                  {restroom.restroom_location_text && (
+                                    <span className="text-xs text-gray-500">
+                                      📍 {restroom.restroom_location_text}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {editingRestroomId === restroom.id ? (
+                                <button
+                                  onClick={cancelEditing}
+                                  className="text-gray-500 hover:text-gray-700 text-sm font-medium px-3 py-1 rounded border border-gray-300"
+                                >
+                                  Cancel
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => startEditingRestroom(restroom)}
+                                    className="text-teal-600 hover:text-teal-700 text-sm font-medium"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteRestroom(restroom.id)}
+                                    className="text-red-500 hover:text-red-700 text-sm font-medium"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <RestroomFormComponent
                   restroomForm={restroomForm}
@@ -678,6 +874,8 @@ export default function AdminPage() {
                   restroomError={restroomError}
                   restroomSuccess={restroomSuccess}
                   restrooms={restrooms}
+                  isEditing={!!editingRestroomId}
+                  onCancelEdit={cancelEditing}
                 />
               </div>
             )}
@@ -744,6 +942,8 @@ function RestroomFormComponent({
   restroomError,
   restroomSuccess,
   restrooms,
+  isEditing = false,
+  onCancelEdit,
 }: {
   restroomForm: RestroomForm
   setRestroomForm: React.Dispatch<React.SetStateAction<RestroomForm>>
@@ -752,11 +952,13 @@ function RestroomFormComponent({
   restroomError: string
   restroomSuccess: boolean
   restrooms: CreatedRestroom[]
+  isEditing?: boolean
+  onCancelEdit?: () => void
 }) {
   return (
     <>
-      {/* Added Restrooms */}
-      {restrooms.length > 0 && (
+      {/* Added Restrooms (only show when not editing) */}
+      {!isEditing && restrooms.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           <h3 className="font-semibold text-gray-900 mb-3">
             Added Restrooms ({restrooms.length})
@@ -781,15 +983,26 @@ function RestroomFormComponent({
       {/* Success Message */}
       {restroomSuccess && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-green-800 text-sm">
-          ✓ Restroom added successfully!
+          ✓ Restroom {isEditing ? 'updated' : 'added'} successfully!
         </div>
       )}
 
-      {/* Add Restroom Form */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="font-semibold text-gray-900 mb-4">
-          Add Restroom
-        </h3>
+      {/* Add/Edit Restroom Form */}
+      <div className={`bg-white rounded-xl shadow-sm border p-6 ${isEditing ? 'border-teal-300' : 'border-gray-200'}`}>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-semibold text-gray-900">
+            {isEditing ? '✏️ Edit Restroom' : 'Add Restroom'}
+          </h3>
+          {isEditing && onCancelEdit && (
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="text-gray-500 hover:text-gray-700 text-sm font-medium"
+            >
+              Cancel Edit
+            </button>
+          )}
+        </div>
 
         <form onSubmit={handleAddRestroom}>
           {/* Gender */}
@@ -981,7 +1194,7 @@ function RestroomFormComponent({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Verification Status
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() =>
@@ -1003,18 +1216,37 @@ function RestroomFormComponent({
                 onClick={() =>
                   setRestroomForm((prev) => ({
                     ...prev,
+                    status: 'verified_absent',
+                  }))
+                }
+                className={`py-3 px-4 rounded-lg font-medium transition ${
+                  restroomForm.status === 'verified_absent'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                ❌ Verified Absent
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setRestroomForm((prev) => ({
+                    ...prev,
                     status: 'unverified',
                   }))
                 }
                 className={`py-3 px-4 rounded-lg font-medium transition ${
                   restroomForm.status === 'unverified'
-                    ? 'bg-amber-500 text-white'
+                    ? 'bg-gray-500 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
                 ❓ Unverified
               </button>
             </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Use "Verified Absent" when you've confirmed no changing station exists in this restroom.
+            </p>
           </div>
 
           {restroomError && (
@@ -1026,9 +1258,15 @@ function RestroomFormComponent({
           <button
             type="submit"
             disabled={restroomLoading}
-            className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg transition"
+            className={`w-full font-semibold py-3 rounded-lg transition ${
+              isEditing
+                ? 'bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 text-white'
+                : 'bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 text-white'
+            }`}
           >
-            {restroomLoading ? 'Adding...' : 'Add Restroom'}
+            {restroomLoading
+              ? (isEditing ? 'Updating...' : 'Adding...')
+              : (isEditing ? 'Update Restroom' : 'Add Restroom')}
           </button>
         </form>
       </div>
