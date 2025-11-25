@@ -214,7 +214,7 @@ export default function MapPage() {
       await fetch('/api/direction-click', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ venue_id: venue.id }),
+        body: JSON.stringify({ venue_id: venue.id, source: 'list' }),
       })
     } catch {}
 

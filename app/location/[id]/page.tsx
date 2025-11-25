@@ -13,6 +13,7 @@ import {
   HoursJson,
 } from '@/lib/types'
 import { formatTime, getFormattedWeeklyHours, isVenueOpen, getTodayHours } from '@/lib/utils'
+import DirectionsButton from './DirectionsButton'
 
 interface Restroom {
   id: string
@@ -101,9 +102,6 @@ export default async function LocationDetailPage({
   const verifiedRestrooms = venue.restrooms.filter((r) => r.status === 'verified_present')
   const unverifiedRestrooms = venue.restrooms.filter((r) => r.status === 'unverified')
 
-  // Get directions URL
-  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}`
-
   // Get weekly hours
   const weeklyHours = getFormattedWeeklyHours(venue.hours_json)
 
@@ -178,14 +176,7 @@ export default async function LocationDetailPage({
           </div>
 
           {/* Get Directions Button */}
-          <a
-            href={directionsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block w-full mt-6 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3.5 rounded-lg text-center transition"
-          >
-            🧭 Get Directions
-          </a>
+          <DirectionsButton venueId={venue.id} lat={venue.lat} lng={venue.lng} />
         </div>
 
         {/* Tips Section */}

@@ -121,12 +121,14 @@ CREATE TABLE direction_clicks (
   venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
   clicked_at TIMESTAMP DEFAULT NOW(),
   user_agent TEXT,
-  ip_hash TEXT
+  ip_hash TEXT,
+  source TEXT DEFAULT 'list' CHECK (source IN ('list', 'detail'))
 );
 
 -- Indexes for analytics
 CREATE INDEX idx_direction_venue ON direction_clicks(venue_id);
 CREATE INDEX idx_direction_date ON direction_clicks(clicked_at);
+CREATE INDEX idx_direction_source ON direction_clicks(source);
 
 -- ============================================
 -- STEP 6: Create PostGIS function for nearby search

@@ -17,11 +17,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { venue_id } = await request.json()
+    const { venue_id, source = 'list' } = await request.json()
 
     if (!venue_id) {
       return NextResponse.json({ error: 'venue_id is required' }, { status: 400 })
     }
+
+    // Validate source
+    const validSources = ['list', 'detail']
+    const clickSource = validSources.includes(source) ? source : 'list'
 
     // Get user agent and hash IP for privacy
     const userAgent = request.headers.get('user-agent') || null
@@ -35,6 +39,7 @@ export async function POST(request: NextRequest) {
         venue_id,
         user_agent: userAgent,
         ip_hash: ipHash,
+        source: clickSource,
       })
 
     if (insertError) {
