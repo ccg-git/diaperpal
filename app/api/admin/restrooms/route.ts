@@ -1,26 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAuthenticatedUser, requireAuth, requireReviewer } from '@/lib/supabase/api'
 import { Gender, StationLocation, VerificationStatus } from '@/lib/types'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-// Verify admin password
-function isAuthorized(request: NextRequest): boolean {
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) return false
-
-  const password = authHeader.substring(7)
-  return password === process.env.ADMIN_PASSWORD
-}
-
 export async function POST(request: NextRequest) {
-  // Check authorization
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { user, profile, supabase } = await getAuthenticatedUser()
+
+  // Check authentication
+  const authError = requireAuth(user)
+  if (authError) return authError
+
+  // Require reviewer or admin role
+  const roleError = requireReviewer(profile)
+  if (roleError) return roleError
 
   try {
     const body = await request.json()
@@ -92,13 +83,14 @@ export async function POST(request: NextRequest) {
         safety_notes: safety_notes || null,
         admin_notes: admin_notes || null,
         verified_at: status === 'verified_present' ? new Date().toISOString() : null,
+        verified_by_user_id: user!.id,
       })
       .select()
       .single()
 
     if (insertError) {
       console.error('Error creating restroom:', insertError)
-      return NextResponse.json({ error: 'Failed to create restroom' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to create restroom', details: insertError.message }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -114,8 +106,9 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET - List restrooms for a venue
+// GET - List restrooms for a venue (publicly accessible for viewing)
 export async function GET(request: NextRequest) {
+  const { supabase } = await getAuthenticatedUser()
   const venueId = request.nextUrl.searchParams.get('venue_id')
 
   if (!venueId) {

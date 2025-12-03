@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getPublicSupabase } from '@/lib/supabase/public-api'
 import { metersToMiles, formatDistance, isVenueOpen, getTodayHours } from '@/lib/utils'
 import { VenueType, Gender, RestroomWithPhotos } from '@/lib/types'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
+  const supabase = getPublicSupabase()
   const searchParams = request.nextUrl.searchParams
   const lat = parseFloat(searchParams.get('lat') || '33.8845')
   const lng = parseFloat(searchParams.get('lng') || '-118.3976')

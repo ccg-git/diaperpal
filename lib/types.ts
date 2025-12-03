@@ -2,10 +2,25 @@
 // Updated to match spec v2.0
 
 // ============================================
+// User & Auth Types
+// ============================================
+
+export type UserRole = 'user' | 'reviewer' | 'admin'
+
+export interface Profile {
+  id: string
+  email: string | null
+  role: UserRole
+  created_at: string
+}
+
+// ============================================
 // Venue Types
 // ============================================
 
 export type VenueType = 'food_drink' | 'parks_outdoors' | 'indoor_activities' | 'errands'
+
+export type VenueStatus = 'pending' | 'approved' | 'rejected'
 
 export type Gender = 'mens' | 'womens' | 'all_gender'
 
@@ -27,6 +42,8 @@ export interface Venue {
   lat: number
   lng: number
   venue_type: VenueType
+  status: VenueStatus
+  submitted_by: string | null
   hours_json: HoursJson | null
   special_hours: SpecialHours[] | null
   rating: number | null
@@ -177,4 +194,16 @@ export const STATUS_CONFIG = {
   verified_present: { emoji: '✅', label: 'Verified' },
   unverified: { emoji: '❓', label: 'Unverified' },
   verified_absent: { emoji: '❌', label: 'Not Available' },
+} as const
+
+export const VENUE_STATUS_CONFIG = {
+  pending: { label: 'Pending Review' },
+  approved: { label: 'Approved' },
+  rejected: { label: 'Rejected' },
+} as const
+
+export const USER_ROLE_CONFIG = {
+  user: { label: 'User' },
+  reviewer: { label: 'Reviewer' },
+  admin: { label: 'Admin' },
 } as const

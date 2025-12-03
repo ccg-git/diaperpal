@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getServiceSupabase } from '@/lib/supabase/public-api'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
+  const supabase = getServiceSupabase()
   const searchParams = request.nextUrl.searchParams
   const lat = searchParams.get('lat')
   const lng = searchParams.get('lng')

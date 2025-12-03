@@ -1,26 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAuthenticatedUser, requireAuth, requireReviewer } from '@/lib/supabase/api'
 import { VenueType } from '@/lib/types'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-// Verify admin password
-function isAuthorized(request: NextRequest): boolean {
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) return false
-
-  const password = authHeader.substring(7)
-  return password === process.env.ADMIN_PASSWORD
-}
-
 export async function POST(request: NextRequest) {
-  // Check authorization
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { user, profile, supabase } = await getAuthenticatedUser()
+
+  // Check authentication
+  const authError = requireAuth(user)
+  if (authError) return authError
+
+  // Require reviewer or admin role
+  const roleError = requireReviewer(profile)
+  if (roleError) return roleError
 
   try {
     const { place_id, venue_type } = await request.json()
@@ -75,6 +66,7 @@ export async function POST(request: NextRequest) {
     ) || []
 
     // Create venue in database
+    // Note: submitted_by is auto-populated by database trigger using auth.uid()
     const { data: venue, error: insertError } = await supabase
       .from('venues')
       .insert({
@@ -103,7 +95,7 @@ export async function POST(request: NextRequest) {
         )
       }
       console.error('Error creating venue:', insertError)
-      return NextResponse.json({ error: 'Failed to create venue' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to create venue', details: insertError.message }, { status: 500 })
     }
 
     return NextResponse.json({

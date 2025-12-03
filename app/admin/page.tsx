@@ -1,15 +1,19 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { useJsApiLoader, Autocomplete } from '@react-google-maps/api'
+import { useAuth } from '@/context/AuthContext'
 import {
   VenueType,
+  VenueStatus,
   Gender,
   StationLocation,
   VerificationStatus,
   VENUE_TYPE_CONFIG,
   GENDER_CONFIG,
   STATION_LOCATION_CONFIG,
+  VENUE_STATUS_CONFIG,
 } from '@/lib/types'
 
 const libraries: ('places')[] = ['places']
@@ -19,12 +23,10 @@ interface RestroomForm {
   station_location: StationLocation
   restroom_location_text: string
   status: VerificationStatus
-  // Issue tracking
   has_safety_concern: boolean
   safety_concern_notes: string
   has_cleanliness_issue: boolean
   cleanliness_issue_notes: string
-  // Tips like "ask for key"
   additional_notes: string
 }
 
@@ -36,7 +38,7 @@ interface Stats {
   totalVenues: number
   totalRestrooms: number
   totalDirectionClicks: number
-  recentVenues: { id: string; name: string; venue_type: VenueType }[]
+  recentVenues: { id: string; name: string; venue_type: VenueType; status?: VenueStatus }[]
 }
 
 interface ExistingVenue {
@@ -44,15 +46,15 @@ interface ExistingVenue {
   name: string
   address: string
   venue_type: VenueType
+  status: VenueStatus
   restroom_count: number
 }
 
 type ActiveTab = 'add-venue' | 'add-restroom' | 'browse'
 
 export default function AdminPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [password, setPassword] = useState('')
-  const [authError, setAuthError] = useState('')
+  const { user, profile, loading, signOut } = useAuth()
+  const router = useRouter()
 
   // Tab state
   const [activeTab, setActiveTab] = useState<ActiveTab>('add-venue')
@@ -100,33 +102,21 @@ export default function AdminPage() {
     libraries,
   })
 
-  // Check if already authenticated (cookie)
-  useEffect(() => {
-    const storedPassword = document.cookie
-      .split('; ')
-      .find((row) => row.startsWith('admin_password='))
-      ?.split('=')[1]
-
-    if (storedPassword) {
-      setPassword(storedPassword)
-      setIsAuthenticated(true)
-    }
-  }, [])
+  // Check authorization
+  const isAuthorized = profile && (profile.role === 'admin' || profile.role === 'reviewer')
 
   // Fetch stats and venues when authenticated
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthorized) {
       fetchStats()
       fetchExistingVenues()
     }
-  }, [isAuthenticated])
+  }, [isAuthorized])
 
   async function fetchStats() {
     setStatsLoading(true)
     try {
-      const res = await fetch('/api/admin/stats', {
-        headers: { Authorization: `Bearer ${password}` },
-      })
+      const res = await fetch('/api/admin/stats')
       if (res.ok) {
         const data = await res.json()
         setStats(data)
@@ -141,9 +131,7 @@ export default function AdminPage() {
   async function fetchExistingVenues() {
     setVenuesLoading(true)
     try {
-      const res = await fetch('/api/admin/venues/list', {
-        headers: { Authorization: `Bearer ${password}` },
-      })
+      const res = await fetch('/api/admin/venues/list')
       if (res.ok) {
         const data = await res.json()
         setExistingVenues(data)
@@ -155,18 +143,9 @@ export default function AdminPage() {
     }
   }
 
-  function handleLogin(e: React.FormEvent) {
-    e.preventDefault()
-    document.cookie = `admin_password=${password}; path=/; max-age=86400`
-    setIsAuthenticated(true)
-    setAuthError('')
-  }
-
   function handleLogout() {
-    document.cookie = 'admin_password=; path=/; max-age=0'
-    setIsAuthenticated(false)
-    setPassword('')
-    resetForm()
+    signOut()
+    router.push('/')
   }
 
   function resetForm() {
@@ -228,7 +207,6 @@ export default function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${password}`,
         },
         body: JSON.stringify({
           place_id: selectedPlace.place_id,
@@ -269,7 +247,6 @@ export default function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${password}`,
         },
         body: JSON.stringify({
           venue_id: targetVenueId,
@@ -312,34 +289,60 @@ export default function AdminPage() {
     }
   }
 
-  // Login screen
-  if (!isAuthenticated) {
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    )
+  }
+
+  // Not authenticated - redirect to login
+  if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
-          <div className="text-center mb-6">
-            <span className="text-4xl">🍼</span>
-            <h1 className="text-2xl font-bold text-gray-900 mt-2">Admin Login</h1>
-          </div>
-          <form onSubmit={handleLogin}>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter admin password"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
-              autoFocus
-            />
-            {authError && (
-              <p className="text-red-500 text-sm mt-2">{authError}</p>
-            )}
+        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md text-center">
+          <span className="text-4xl">🍼</span>
+          <h1 className="text-2xl font-bold text-gray-900 mt-2 mb-4">Admin Access Required</h1>
+          <p className="text-gray-600 mb-6">Please sign in to access the admin panel.</p>
+          <button
+            onClick={() => router.push('/login')}
+            className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-lg transition"
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Authenticated but not authorized (not reviewer/admin)
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md text-center">
+          <span className="text-4xl">🔒</span>
+          <h1 className="text-2xl font-bold text-gray-900 mt-2 mb-4">Access Denied</h1>
+          <p className="text-gray-600 mb-2">You don&apos;t have permission to access this page.</p>
+          <p className="text-sm text-gray-500 mb-6">
+            Signed in as: {user.email}<br />
+            Role: {profile?.role || 'user'}
+          </p>
+          <div className="space-y-3">
             <button
-              type="submit"
-              className="w-full mt-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-lg transition"
+              onClick={() => router.push('/')}
+              className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-lg transition"
             >
-              Login
+              Go Home
             </button>
-          </form>
+            <button
+              onClick={handleLogout}
+              className="w-full border border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold py-3 rounded-lg transition"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -354,7 +357,7 @@ export default function AdminPage() {
             <p className="text-sm mb-3">Please check that:</p>
             <ul className="list-disc list-inside text-sm space-y-1">
               <li>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is set in your .env.local file</li>
-              <li>The API key has "Maps JavaScript API" and "Places API" enabled</li>
+              <li>The API key has &quot;Maps JavaScript API&quot; and &quot;Places API&quot; enabled</li>
               <li>The API key has no domain restrictions blocking localhost</li>
             </ul>
           </div>
@@ -380,12 +383,18 @@ export default function AdminPage() {
             <span className="text-2xl">🍼</span>
             <h1 className="text-xl font-bold text-gray-900">DiaperPal Admin</h1>
           </div>
-          <button
-            onClick={handleLogout}
-            className="text-gray-500 hover:text-gray-700 text-sm"
-          >
-            Logout
-          </button>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-sm text-gray-900">{user.email}</p>
+              <p className="text-xs text-gray-500 capitalize">{profile?.role}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="text-gray-500 hover:text-gray-700 text-sm"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </div>
 
@@ -591,6 +600,11 @@ export default function AdminPage() {
                             <p className="font-semibold text-gray-900">{venue.name}</p>
                             <p className="text-sm text-gray-500">
                               {VENUE_TYPE_CONFIG[venue.venue_type]?.emoji} {VENUE_TYPE_CONFIG[venue.venue_type]?.label}
+                              {venue.status !== 'approved' && (
+                                <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                                  {VENUE_STATUS_CONFIG[venue.status]?.label}
+                                </span>
+                              )}
                             </p>
                           </div>
                           <span className="text-sm text-gray-400">
@@ -662,6 +676,11 @@ export default function AdminPage() {
                             {VENUE_TYPE_CONFIG[venue.venue_type]?.emoji}{' '}
                             {VENUE_TYPE_CONFIG[venue.venue_type]?.label}
                           </span>
+                          {venue.status !== 'approved' && (
+                            <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">
+                              {VENUE_STATUS_CONFIG[venue.status]?.label}
+                            </span>
+                          )}
                           <span className="text-xs text-gray-500">
                             {venue.restroom_count} changing station{venue.restroom_count !== 1 ? 's' : ''}
                           </span>
@@ -673,7 +692,7 @@ export default function AdminPage() {
                         rel="noopener noreferrer"
                         className="text-teal-600 hover:text-teal-700 text-sm font-medium"
                       >
-                        View →
+                        View
                       </a>
                     </div>
                   </div>
@@ -850,8 +869,8 @@ function RestroomFormComponent({
                 className="w-5 h-5 text-amber-500 border-gray-300 rounded focus:ring-amber-500"
               />
               <div>
-                <span className="font-medium text-gray-900">⚠️ Safety Concern</span>
-                <p className="text-xs text-gray-500">Check if there's a safety issue (broken strap, etc.)</p>
+                <span className="font-medium text-gray-900">Safety Concern</span>
+                <p className="text-xs text-gray-500">Check if there&apos;s a safety issue (broken strap, etc.)</p>
               </div>
             </label>
             {restroomForm.has_safety_concern && (
@@ -886,8 +905,8 @@ function RestroomFormComponent({
                 className="w-5 h-5 text-amber-500 border-gray-300 rounded focus:ring-amber-500"
               />
               <div>
-                <span className="font-medium text-gray-900">🧹 Cleanliness Issue</span>
-                <p className="text-xs text-gray-500">Check if there's a cleanliness problem</p>
+                <span className="font-medium text-gray-900">Cleanliness Issue</span>
+                <p className="text-xs text-gray-500">Check if there&apos;s a cleanliness problem</p>
               </div>
             </label>
             {restroomForm.has_cleanliness_issue && (
@@ -909,7 +928,7 @@ function RestroomFormComponent({
           {/* Tips / Notes (Always visible) */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              💡 Tips / Notes (optional)
+              Tips / Notes (optional)
             </label>
             <textarea
               value={restroomForm.additional_notes}
@@ -948,7 +967,7 @@ function RestroomFormComponent({
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                ✅ Verified Present
+                Verified Present
               </button>
               <button
                 type="button"
@@ -964,7 +983,7 @@ function RestroomFormComponent({
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                ❓ Unverified
+                Unverified
               </button>
             </div>
           </div>

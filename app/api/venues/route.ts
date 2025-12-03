@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
+import { getAuthenticatedUser, requireAuth, requireReviewer } from '@/lib/supabase/api'
 
 export async function POST(request: NextRequest) {
   try {
+    const { user, profile, supabase } = await getAuthenticatedUser()
+
+    // Require authentication
+    const authError = requireAuth(user)
+    if (authError) return authError
+
+    // Require reviewer or admin role to create venues
+    const roleError = requireReviewer(profile)
+    if (roleError) return roleError
+
     const body = await request.json()
     const { name, address, lat, lng, place_id, venue_type } = body
 
@@ -35,6 +40,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new venue
+    // Note: submitted_by is auto-populated by database trigger using auth.uid()
+    // Note: status defaults to 'approved' in database (can be changed based on your needs)
     const { data: venueData, error: venueError } = await supabase
       .from('venues')
       .insert({
@@ -44,7 +51,7 @@ export async function POST(request: NextRequest) {
         lng,
         google_place_id: place_id || null,
         venue_type,
-         coordinates: `POINT(${lng} ${lat})`,
+        coordinates: `POINT(${lng} ${lat})`,
         data_source: 'google_places',
         created_at: new Date().toISOString(),
       })
@@ -53,7 +60,7 @@ export async function POST(request: NextRequest) {
     if (venueError) {
       console.error('Venue insert error:', venueError)
       return NextResponse.json(
-        { error: 'Failed to create venue', details: venueError },
+        { error: 'Failed to create venue', details: venueError.message },
         { status: 500 }
       )
     }

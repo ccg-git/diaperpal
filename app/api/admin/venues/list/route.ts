@@ -1,28 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server'
+import { getAuthenticatedUser, requireAuth, requireReviewer } from '@/lib/supabase/api'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+export async function GET() {
+  const { user, profile, supabase } = await getAuthenticatedUser()
 
-// Verify admin password
-function isAuthorized(request: NextRequest): boolean {
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) return false
+  // Check authentication
+  const authError = requireAuth(user)
+  if (authError) return authError
 
-  const password = authHeader.substring(7)
-  return password === process.env.ADMIN_PASSWORD
-}
-
-export async function GET(request: NextRequest) {
-  // Check authorization
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  // Require reviewer or admin role
+  const roleError = requireReviewer(profile)
+  if (roleError) return roleError
 
   try {
     // Get all venues with restroom count
+    // Note: With RLS, reviewers/admins can see all venues regardless of status
     const { data: venues, error } = await supabase
       .from('venues')
       .select(`
@@ -30,6 +22,7 @@ export async function GET(request: NextRequest) {
         name,
         address,
         venue_type,
+        status,
         restrooms(id)
       `)
       .order('created_at', { ascending: false })
@@ -45,6 +38,7 @@ export async function GET(request: NextRequest) {
       name: venue.name,
       address: venue.address,
       venue_type: venue.venue_type,
+      status: venue.status,
       restroom_count: Array.isArray(venue.restrooms) ? venue.restrooms.length : 0,
     }))
 
