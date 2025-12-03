@@ -72,6 +72,25 @@ export async function GET(request: NextRequest) {
       console.error('Error counting direction clicks:', clicksError)
     }
 
+    // Get direction clicks by source
+    const { count: listClicks, error: listClicksError } = await supabase
+      .from('direction_clicks')
+      .select('*', { count: 'exact', head: true })
+      .eq('source', 'list')
+
+    if (listClicksError) {
+      console.error('Error counting list clicks:', listClicksError)
+    }
+
+    const { count: detailClicks, error: detailClicksError } = await supabase
+      .from('direction_clicks')
+      .select('*', { count: 'exact', head: true })
+      .eq('source', 'detail')
+
+    if (detailClicksError) {
+      console.error('Error counting detail clicks:', detailClicksError)
+    }
+
     // Get recent venues (last 5)
     const { data: recentVenues, error: recentError } = await supabase
       .from('venues')
@@ -87,6 +106,10 @@ export async function GET(request: NextRequest) {
       totalVenues: totalVenues ?? 0,
       totalRestrooms: totalRestrooms ?? 0,
       totalDirectionClicks: totalDirectionClicks ?? 0,
+      directionClicksBySource: {
+        list: listClicks ?? 0,
+        detail: detailClicks ?? 0,
+      },
       recentVenues: recentVenues ?? [],
     })
   } catch (error) {

@@ -47,6 +47,10 @@ interface Stats {
   totalVenues: number
   totalRestrooms: number
   totalDirectionClicks: number
+  directionClicksBySource?: {
+    list: number
+    detail: number
+  }
   recentVenues: { id: string; name: string; venue_type: VenueType }[]
 }
 
@@ -568,6 +572,16 @@ export default function AdminPage() {
               {statsLoading ? '...' : stats?.totalDirectionClicks ?? 0}
             </p>
             <p className="text-sm text-gray-500 mt-1">Direction Clicks</p>
+            {stats?.directionClicksBySource && (
+              <div className="flex justify-center gap-3 mt-2 text-xs">
+                <span className="text-gray-500">
+                  List: <span className="font-medium text-gray-700">{stats.directionClicksBySource.list}</span>
+                </span>
+                <span className="text-gray-500">
+                  Detail: <span className="font-medium text-gray-700">{stats.directionClicksBySource.detail}</span>
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
