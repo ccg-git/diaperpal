@@ -164,74 +164,8 @@ export default async function LocationDetailPage({
           </div>
         </div>
 
-        {/* Collapsible Hours */}
-        {venue.hours_json && (
-          <details className="bg-white border-t border-gray-200 group">
-            <summary className="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition">
-              <span className="font-medium text-gray-900">Hours</span>
-              <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
-            </summary>
-            <div className="px-6 pb-4">
-              <div className="bg-gray-50 rounded-xl divide-y divide-gray-200">
-                {weeklyHours.map(({ day, hours, isToday }) => (
-                  <div
-                    key={day}
-                    className={`flex justify-between px-4 py-2.5 ${isToday ? 'bg-teal-50 rounded-lg' : ''}`}
-                  >
-                    <span className={`text-sm ${isToday ? 'text-teal-700 font-medium' : 'text-gray-700'}`}>
-                      {day}
-                      {isToday && (
-                        <span className="ml-2 text-xs bg-teal-600 text-white px-1.5 py-0.5 rounded">
-                          Today
-                        </span>
-                      )}
-                    </span>
-                    <span className={`text-sm ${hours === 'Closed' ? 'text-red-500' : 'text-gray-600'}`}>
-                      {hours}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </details>
-        )}
-
-        {/* Collapsible Venue Photos */}
-        {venue.photo_urls && venue.photo_urls.length > 0 && (
-          <details className="bg-white border-t border-gray-200 group">
-            <summary className="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition">
-              <span className="font-medium text-gray-900">Photos ({venue.photo_urls.length})</span>
-              <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
-            </summary>
-            <div className="px-6 pb-4">
-              <div className="grid grid-cols-2 gap-2">
-                {venue.photo_urls.slice(0, 4).map((url, index) => (
-                  <img
-                    key={index}
-                    src={url}
-                    alt={`${venue.name} photo ${index + 1}`}
-                    className="w-full h-28 object-cover rounded-lg"
-                  />
-                ))}
-              </div>
-            </div>
-          </details>
-        )}
-
-        {/* Get Directions Button */}
-        <div className="p-6 bg-white border-t border-gray-200">
-          <a
-            href={directionsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3.5 rounded-lg text-center transition"
-          >
-            Get Directions
-          </a>
-        </div>
-
         {/* Changing Stations Section */}
-        <div className="p-6">
+        <div className="p-6 bg-white border-t border-gray-200">
           <h2 className="text-lg font-bold text-gray-900 mb-4">
             Changing Stations ({venue.restrooms.length})
           </h2>
@@ -342,6 +276,72 @@ export default async function LocationDetailPage({
               No changing station data available yet.
             </div>
           )}
+        </div>
+
+        {/* Collapsible Hours */}
+        {venue.hours_json && (
+          <details className="bg-white border-t border-gray-200 group">
+            <summary className="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition">
+              <span className="font-medium text-gray-900">Hours</span>
+              <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <div className="px-6 pb-4">
+              <div className="bg-gray-50 rounded-xl divide-y divide-gray-200">
+                {weeklyHours.map(({ day, hours, isToday }) => (
+                  <div
+                    key={day}
+                    className={`flex justify-between px-4 py-2.5 ${isToday ? 'bg-teal-50 rounded-lg' : ''}`}
+                  >
+                    <span className={`text-sm ${isToday ? 'text-teal-700 font-medium' : 'text-gray-700'}`}>
+                      {day}
+                      {isToday && (
+                        <span className="ml-2 text-xs bg-teal-600 text-white px-1.5 py-0.5 rounded">
+                          Today
+                        </span>
+                      )}
+                    </span>
+                    <span className={`text-sm ${hours === 'Closed' ? 'text-red-500' : 'text-gray-600'}`}>
+                      {hours}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </details>
+        )}
+
+        {/* Collapsible Venue Photos */}
+        {venue.photo_urls && venue.photo_urls.length > 0 && (
+          <details className="bg-white border-t border-gray-200 group">
+            <summary className="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition">
+              <span className="font-medium text-gray-900">Venue Photos ({venue.photo_urls.length})</span>
+              <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <div className="px-6 pb-4">
+              <div className="grid grid-cols-2 gap-2">
+                {venue.photo_urls.slice(0, 4).map((url, index) => (
+                  <img
+                    key={index}
+                    src={url}
+                    alt={`${venue.name} photo ${index + 1}`}
+                    className="w-full h-28 object-cover rounded-lg"
+                  />
+                ))}
+              </div>
+            </div>
+          </details>
+        )}
+
+        {/* Get Directions Button */}
+        <div className="p-6 bg-white border-t border-gray-200">
+          <a
+            href={directionsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3.5 rounded-lg text-center transition"
+          >
+            Get Directions
+          </a>
         </div>
 
         {/* Bottom Padding */}
