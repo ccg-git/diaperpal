@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useJsApiLoader, Autocomplete } from '@react-google-maps/api'
+import { Session, User } from '@supabase/supabase-js'
+import { createBrowserClient, UserRole, isReviewer } from '@/lib/supabase-auth'
 import {
   VenueType,
   Gender,
@@ -13,6 +15,15 @@ import {
 } from '@/lib/types'
 
 const libraries: ('places')[] = ['places']
+
+// Lazy-initialize Supabase client to avoid build-time errors
+let supabaseInstance: ReturnType<typeof createBrowserClient> | null = null
+function getSupabase() {
+  if (!supabaseInstance) {
+    supabaseInstance = createBrowserClient()
+  }
+  return supabaseInstance
+}
 
 interface RestroomForm {
   gender: Gender
@@ -50,9 +61,16 @@ interface ExistingVenue {
 type ActiveTab = 'add-venue' | 'add-restroom' | 'browse'
 
 export default function AdminPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [password, setPassword] = useState('')
+  // Auth state
+  const [session, setSession] = useState<Session | null>(null)
+  const [userRole, setUserRole] = useState<UserRole | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [authError, setAuthError] = useState('')
+
+  // Login form
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
 
   // Tab state
   const [activeTab, setActiveTab] = useState<ActiveTab>('add-venue')
@@ -100,32 +118,76 @@ export default function AdminPage() {
     libraries,
   })
 
-  // Check if already authenticated (cookie)
+  // Initialize auth state and listen for changes
   useEffect(() => {
-    const storedPassword = document.cookie
-      .split('; ')
-      .find((row) => row.startsWith('admin_password='))
-      ?.split('=')[1]
+    const supabase = getSupabase()
 
-    if (storedPassword) {
-      setPassword(storedPassword)
-      setIsAuthenticated(true)
-    }
+    // Get initial session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setSession(session)
+      if (session) {
+        await fetchUserRole(session.user.id)
+      }
+      setAuthLoading(false)
+    })
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        setSession(session)
+        if (session) {
+          await fetchUserRole(session.user.id)
+        } else {
+          setUserRole(null)
+        }
+      }
+    )
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  // Fetch stats and venues when authenticated
+  // Fetch user role from profiles table
+  async function fetchUserRole(userId: string) {
+    const supabase = getSupabase()
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .single()
+
+    if (error) {
+      console.error('Error fetching user role:', error)
+      setUserRole('user')
+      return
+    }
+
+    setUserRole(data.role as UserRole)
+  }
+
+  // Get access token for API calls
+  function getAccessToken(): string | null {
+    return session?.access_token ?? null
+  }
+
+  // Check if user has required role
+  const hasAccess = session && userRole && isReviewer(userRole)
+
+  // Fetch stats and venues when authenticated with proper role
   useEffect(() => {
-    if (isAuthenticated) {
+    if (hasAccess) {
       fetchStats()
       fetchExistingVenues()
     }
-  }, [isAuthenticated])
+  }, [hasAccess])
 
   async function fetchStats() {
+    const token = getAccessToken()
+    if (!token) return
+
     setStatsLoading(true)
     try {
       const res = await fetch('/api/admin/stats', {
-        headers: { Authorization: `Bearer ${password}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       if (res.ok) {
         const data = await res.json()
@@ -139,10 +201,13 @@ export default function AdminPage() {
   }
 
   async function fetchExistingVenues() {
+    const token = getAccessToken()
+    if (!token) return
+
     setVenuesLoading(true)
     try {
       const res = await fetch('/api/admin/venues/list', {
-        headers: { Authorization: `Bearer ${password}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       if (res.ok) {
         const data = await res.json()
@@ -155,17 +220,33 @@ export default function AdminPage() {
     }
   }
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    document.cookie = `admin_password=${password}; path=/; max-age=86400`
-    setIsAuthenticated(true)
+    setLoginLoading(true)
     setAuthError('')
+
+    const supabase = getSupabase()
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      setAuthError(error.message)
+      setLoginLoading(false)
+      return
+    }
+
+    // Session will be set by the onAuthStateChange listener
+    setPassword('')
+    setLoginLoading(false)
   }
 
-  function handleLogout() {
-    document.cookie = 'admin_password=; path=/; max-age=0'
-    setIsAuthenticated(false)
-    setPassword('')
+  async function handleLogout() {
+    const supabase = getSupabase()
+    await supabase.auth.signOut()
+    setSession(null)
+    setUserRole(null)
     resetForm()
   }
 
@@ -214,6 +295,12 @@ export default function AdminPage() {
   async function handleCreateVenue(e: React.FormEvent) {
     e.preventDefault()
 
+    const token = getAccessToken()
+    if (!token) {
+      setVenueError('Not authenticated')
+      return
+    }
+
     if (!selectedPlace?.place_id) {
       setVenueError('Please select a venue from the autocomplete')
       return
@@ -228,7 +315,7 @@ export default function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${password}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           place_id: selectedPlace.place_id,
@@ -257,6 +344,12 @@ export default function AdminPage() {
   async function handleAddRestroom(e: React.FormEvent) {
     e.preventDefault()
 
+    const token = getAccessToken()
+    if (!token) {
+      setRestroomError('Not authenticated')
+      return
+    }
+
     const targetVenueId = venueId || selectedExistingVenue?.id
     if (!targetVenueId) return
 
@@ -269,7 +362,7 @@ export default function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${password}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           venue_id: targetVenueId,
@@ -312,34 +405,82 @@ export default function AdminPage() {
     }
   }
 
-  // Login screen
-  if (!isAuthenticated) {
+  // Loading state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    )
+  }
+
+  // Login screen - show if not authenticated or wrong role
+  if (!session || !userRole) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
           <div className="text-center mb-6">
             <span className="text-4xl">🍼</span>
             <h1 className="text-2xl font-bold text-gray-900 mt-2">Admin Login</h1>
+            <p className="text-gray-500 text-sm mt-1">Sign in with your admin account</p>
           </div>
           <form onSubmit={handleLogin}>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter admin password"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
-              autoFocus
-            />
+            <div className="mb-4">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+                autoFocus
+                required
+              />
+            </div>
+            <div className="mb-4">
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+                required
+              />
+            </div>
             {authError && (
-              <p className="text-red-500 text-sm mt-2">{authError}</p>
+              <p className="text-red-500 text-sm mb-4">{authError}</p>
             )}
             <button
               type="submit"
-              className="w-full mt-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-lg transition"
+              disabled={loginLoading}
+              className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-400 text-white font-semibold py-3 rounded-lg transition"
             >
-              Login
+              {loginLoading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
+        </div>
+      </div>
+    )
+  }
+
+  // Access denied - authenticated but wrong role
+  if (!isReviewer(userRole)) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md text-center">
+          <span className="text-4xl">🚫</span>
+          <h1 className="text-2xl font-bold text-gray-900 mt-4">Access Denied</h1>
+          <p className="text-gray-500 mt-2">
+            Your account doesn't have permission to access the admin panel.
+          </p>
+          <p className="text-gray-400 text-sm mt-1">
+            Signed in as: {session.user.email}
+          </p>
+          <button
+            onClick={handleLogout}
+            className="mt-6 text-teal-600 hover:text-teal-700 font-medium"
+          >
+            Sign out and try another account
+          </button>
         </div>
       </div>
     )
@@ -380,12 +521,18 @@ export default function AdminPage() {
             <span className="text-2xl">🍼</span>
             <h1 className="text-xl font-bold text-gray-900">DiaperPal Admin</h1>
           </div>
-          <button
-            onClick={handleLogout}
-            className="text-gray-500 hover:text-gray-700 text-sm"
-          >
-            Logout
-          </button>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-sm text-gray-700">{session.user.email}</p>
+              <p className="text-xs text-gray-500 capitalize">{userRole} role</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="text-gray-500 hover:text-gray-700 text-sm"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </div>
 
