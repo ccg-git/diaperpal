@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         address: place.formatted_address,
         lat: place.geometry.location.lat,
         lng: place.geometry.location.lng,
-        coordinates: `POINT(${place.geometry.location.lng} ${place.geometry.location.lat})`,
+        coordinates: `SRID=4326;POINT(${place.geometry.location.lng} ${place.geometry.location.lat})`,
         venue_type,
         hours_json,
         rating: place.rating || null,
@@ -98,8 +98,16 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         )
       }
-      console.error('Error creating venue:', insertError)
-      return NextResponse.json({ error: 'Failed to create venue' }, { status: 500 })
+      // Check for foreign key constraint violation (user profile doesn't exist)
+      if (insertError.code === '23503') {
+        console.error('Foreign key constraint violation - user profile may not exist:', insertError)
+        return NextResponse.json(
+          { error: 'User profile not found. Please ensure your account is properly set up.' },
+          { status: 400 }
+        )
+      }
+      console.error('Error creating venue:', insertError.code, insertError.message, insertError.details)
+      return NextResponse.json({ error: `Failed to create venue: ${insertError.message}` }, { status: 500 })
     }
 
     return NextResponse.json({
