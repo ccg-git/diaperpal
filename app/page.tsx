@@ -1,50 +1,26 @@
-'use client'
-
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
 
 export default function Home() {
-  const [isClient, setIsClient] = useState(false)
-
-  useEffect(() => {
-    setIsClient(true)
-  }, [])
-
-  if (!isClient) {
-    return null
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 p-4">
-      <div className="max-w-md mx-auto pt-20">
-        <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-          <h1 className="text-4xl font-bold text-blue-600 mb-2">DiaperPal</h1>
-          <p className="text-gray-600 mb-8">
-            Find verified changing stations nearby
-          </p>
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 py-12">
+      <div className="max-w-sm w-full text-center">
+        {/* Headline */}
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-snug">
+          Getting out the door is hard enough.
+        </h1>
 
-          <div className="space-y-4">
-            <Link
-              href="/map"
-              className="block w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-lg transition text-center"
-            >
-              🗺️ Emergency Mode
-            </Link>
+        {/* Subhead */}
+        <p className="mt-3 text-base sm:text-lg text-gray-500 leading-relaxed">
+          For when you've packed everything but the changing station.
+        </p>
 
-            <Link
-              href="/admin"
-              className="block w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-4 px-6 rounded-lg transition text-center"
-            >
-              ➕ Add Location
-            </Link>
-          </div>
-
-          <div className="mt-8 pt-8 border-t border-gray-200">
-            <p className="text-sm text-gray-500">
-              Beta Version - Help us verify locations!
-            </p>
-          </div>
-        </div>
+        {/* CTA Button */}
+        <Link
+          href="/map"
+          className="inline-block mt-8 px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-md transition"
+        >
+          Find a Station
+        </Link>
       </div>
     </div>
   )
