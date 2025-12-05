@@ -39,6 +39,26 @@ export async function GET(request: NextRequest) {
       console.error('Error counting direction clicks:', clicksError)
     }
 
+    // Get direction clicks breakdown by source
+    const { data: clicksBySource, error: sourceError } = await supabase
+      .from('direction_clicks')
+      .select('source')
+
+    if (sourceError) {
+      console.error('Error fetching clicks by source:', sourceError)
+    }
+
+    // Count clicks by source
+    const sourceBreakdown = { list: 0, map: 0, detail: 0 }
+    if (clicksBySource) {
+      for (const click of clicksBySource) {
+        const src = click.source as keyof typeof sourceBreakdown
+        if (src in sourceBreakdown) {
+          sourceBreakdown[src]++
+        }
+      }
+    }
+
     // Get recent venues (last 5)
     const { data: recentVenues, error: recentError } = await supabase
       .from('venues')
@@ -54,6 +74,7 @@ export async function GET(request: NextRequest) {
       totalVenues: totalVenues ?? 0,
       totalRestrooms: totalRestrooms ?? 0,
       totalDirectionClicks: totalDirectionClicks ?? 0,
+      clicksBySource: sourceBreakdown,
       recentVenues: recentVenues ?? [],
     })
   } catch (error) {
