@@ -3,12 +3,15 @@ import { createClient } from '@supabase/supabase-js'
 import { metersToMiles, formatDistance, isVenueOpen, getTodayHours } from '@/lib/utils'
 import { VenueType, Gender, RestroomWithPhotos } from '@/lib/types'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+// Prevent static generation - this route requires runtime env vars
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
+  // Create client inside handler to avoid build-time initialization errors
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   const searchParams = request.nextUrl.searchParams
   const lat = parseFloat(searchParams.get('lat') || '33.8845')
   const lng = parseFloat(searchParams.get('lng') || '-118.3976')

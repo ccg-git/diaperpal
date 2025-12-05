@@ -1,26 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Gender, StationLocation, VerificationStatus } from '@/lib/types'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-// Verify admin password
-function isAuthorized(request: NextRequest): boolean {
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) return false
-
-  const password = authHeader.substring(7)
-  return password === process.env.ADMIN_PASSWORD
-}
+import { requireReviewer } from '@/lib/auth-helpers'
 
 export async function POST(request: NextRequest) {
-  // Check authorization
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Require reviewer or admin role
+  const authResult = await requireReviewer(request)
+  if (!authResult.success) {
+    return authResult.response
   }
+
+  const { user, supabase } = authResult
 
   try {
     const body = await request.json()
@@ -80,7 +70,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Venue not found' }, { status: 404 })
     }
 
-    // Create restroom
+    // Create restroom with audit fields
     const { data: restroom, error: insertError } = await supabase
       .from('restrooms')
       .insert({
@@ -92,6 +82,8 @@ export async function POST(request: NextRequest) {
         safety_notes: safety_notes || null,
         admin_notes: admin_notes || null,
         verified_at: status === 'verified_present' ? new Date().toISOString() : null,
+        verified_by_user_id: status === 'verified_present' ? user.user.id : null,
+        created_by_user_id: user.user.id,
       })
       .select()
       .single()
@@ -114,13 +106,19 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET - List restrooms for a venue
+// GET - List restrooms for a venue (public read, RLS handles access)
 export async function GET(request: NextRequest) {
   const venueId = request.nextUrl.searchParams.get('venue_id')
 
   if (!venueId) {
     return NextResponse.json({ error: 'venue_id is required' }, { status: 400 })
   }
+
+  // Create an anonymous client for public read access
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 
   try {
     const { data: restrooms, error } = await supabase

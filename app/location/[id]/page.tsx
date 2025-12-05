@@ -13,6 +13,7 @@ import {
   HoursJson,
 } from '@/lib/types'
 import { formatTime, getFormattedWeeklyHours, isVenueOpen, getTodayHours } from '@/lib/utils'
+import ReportIssueButton from './ReportIssueButton'
 
 interface Restroom {
   id: string
@@ -271,6 +272,15 @@ export default async function LocationDetailPage({
                       </div>
                     </div>
                   )}
+
+                  {/* Report Issue */}
+                  <div className="border-t border-gray-100 px-4 py-3 flex justify-end">
+                    <ReportIssueButton
+                      restroomId={restroom.id}
+                      venueName={venue.name}
+                      restroomLabel={`${GENDER_CONFIG[restroom.gender].label} Restroom`}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -293,7 +303,14 @@ export default async function LocationDetailPage({
                       <span>{GENDER_CONFIG[restroom.gender].emoji}</span>
                       <span className="font-medium">{GENDER_CONFIG[restroom.gender].label}</span>
                     </div>
-                    <span className="text-xs text-gray-500">Needs verification</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-gray-500">Needs verification</span>
+                      <ReportIssueButton
+                        restroomId={restroom.id}
+                        venueName={venue.name}
+                        restroomLabel={`${GENDER_CONFIG[restroom.gender].label} Restroom (Unverified)`}
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
