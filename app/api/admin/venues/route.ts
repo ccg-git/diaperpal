@@ -1,26 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { VenueType } from '@/lib/types'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-// Verify admin password
-function isAuthorized(request: NextRequest): boolean {
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) return false
-
-  const password = authHeader.substring(7)
-  return password === process.env.ADMIN_PASSWORD
-}
+import { requireReviewer, getServiceClient } from '@/lib/auth-helpers'
 
 export async function POST(request: NextRequest) {
-  // Check authorization
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Require reviewer or admin role
+  const authResult = await requireReviewer(request)
+  if (!authResult.success) {
+    return authResult.response
   }
+
+  const { user, supabase } = authResult
+
+  // Use service client for venue creation because we need to bypass RLS
+  // to allow the set_submitted_by trigger to work properly
+  // The trigger uses auth.uid() which is set from the JWT
+  const serviceClient = getServiceClient()
 
   try {
     const { place_id, venue_type } = await request.json()
@@ -74,8 +68,9 @@ export async function POST(request: NextRequest) {
       `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${p.photo_reference}&key=${googleApiKey}`
     ) || []
 
-    // Create venue in database
-    const { data: venue, error: insertError } = await supabase
+    // Create venue in database using service client
+    // We set submitted_by explicitly since service client doesn't have auth context
+    const { data: venue, error: insertError } = await serviceClient
       .from('venues')
       .insert({
         place_id,
@@ -89,6 +84,7 @@ export async function POST(request: NextRequest) {
         rating: place.rating || null,
         review_count: place.user_ratings_total || null,
         photo_urls,
+        submitted_by: user.user.id,
         google_data_refreshed_at: new Date().toISOString(),
       })
       .select()

@@ -1,25 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-// Verify admin password
-function isAuthorized(request: NextRequest): boolean {
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) return false
-
-  const password = authHeader.substring(7)
-  return password === process.env.ADMIN_PASSWORD
-}
+import { requireReviewer, getServiceClient } from '@/lib/auth-helpers'
 
 export async function GET(request: NextRequest) {
-  // Check authorization
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Require reviewer or admin role to view stats
+  const authResult = await requireReviewer(request)
+  if (!authResult.success) {
+    return authResult.response
   }
+
+  // Use service client for stats since we need to count all records
+  const supabase = getServiceClient()
 
   try {
     // Get total venues count
