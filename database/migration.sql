@@ -314,6 +314,14 @@ ALTER TABLE restroom_photos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE direction_clicks ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------
+-- Helper function to get current user's role (bypasses RLS to avoid circular dependency)
+-- -----------------------------
+CREATE OR REPLACE FUNCTION public.get_my_role()
+RETURNS user_role AS $$
+  SELECT role FROM public.profiles WHERE id = auth.uid();
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+-- -----------------------------
 -- Profiles policies
 -- -----------------------------
 CREATE POLICY "Users can read own profile"
@@ -324,13 +332,7 @@ CREATE POLICY "Users can read own profile"
 CREATE POLICY "Admins can read all profiles"
   ON profiles FOR SELECT
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role = 'admin'
-    )
-  );
+  USING (public.get_my_role() = 'admin');
 
 -- -----------------------------
 -- Venues policies
@@ -343,46 +345,22 @@ CREATE POLICY "Public read approved venues"
 CREATE POLICY "Reviewers see all venues"
   ON venues FOR SELECT
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role IN ('reviewer', 'admin')
-    )
-  );
+  USING (public.get_my_role() IN ('reviewer', 'admin'));
 
 CREATE POLICY "Reviewers can insert venues"
   ON venues FOR INSERT
   TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role IN ('reviewer', 'admin')
-    )
-  );
+  WITH CHECK (public.get_my_role() IN ('reviewer', 'admin'));
 
 CREATE POLICY "Admins can update venues"
   ON venues FOR UPDATE
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role = 'admin'
-    )
-  );
+  USING (public.get_my_role() = 'admin');
 
 CREATE POLICY "Admins can delete venues"
   ON venues FOR DELETE
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role = 'admin'
-    )
-  );
+  USING (public.get_my_role() = 'admin');
 
 -- -----------------------------
 -- Restrooms policies
@@ -395,46 +373,22 @@ CREATE POLICY "Public read approved restrooms"
 CREATE POLICY "Reviewers see all restrooms"
   ON restrooms FOR SELECT
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role IN ('reviewer', 'admin')
-    )
-  );
+  USING (public.get_my_role() IN ('reviewer', 'admin'));
 
 CREATE POLICY "Reviewers can insert restrooms"
   ON restrooms FOR INSERT
   TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role IN ('reviewer', 'admin')
-    )
-  );
+  WITH CHECK (public.get_my_role() IN ('reviewer', 'admin'));
 
 CREATE POLICY "Admins can update restrooms"
   ON restrooms FOR UPDATE
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role = 'admin'
-    )
-  );
+  USING (public.get_my_role() = 'admin');
 
 CREATE POLICY "Admins can delete restrooms"
   ON restrooms FOR DELETE
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role = 'admin'
-    )
-  );
+  USING (public.get_my_role() = 'admin');
 
 -- -----------------------------
 -- Restroom photos policies
@@ -447,35 +401,17 @@ CREATE POLICY "Public read photos"
 CREATE POLICY "Reviewers can insert photos"
   ON restroom_photos FOR INSERT
   TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role IN ('reviewer', 'admin')
-    )
-  );
+  WITH CHECK (public.get_my_role() IN ('reviewer', 'admin'));
 
 CREATE POLICY "Admins can update photos"
   ON restroom_photos FOR UPDATE
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role = 'admin'
-    )
-  );
+  USING (public.get_my_role() = 'admin');
 
 CREATE POLICY "Admins can delete photos"
   ON restroom_photos FOR DELETE
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role = 'admin'
-    )
-  );
+  USING (public.get_my_role() = 'admin');
 
 -- -----------------------------
 -- Direction clicks policies
@@ -488,24 +424,12 @@ CREATE POLICY "Public can insert clicks"
 CREATE POLICY "Admins can read clicks"
   ON direction_clicks FOR SELECT
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role = 'admin'
-    )
-  );
+  USING (public.get_my_role() = 'admin');
 
 CREATE POLICY "Admins can delete clicks"
   ON direction_clicks FOR DELETE
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role = 'admin'
-    )
-  );
+  USING (public.get_my_role() = 'admin');
 
 -- ============================================
 -- DONE! Schema matches production as of Dec 5, 2025

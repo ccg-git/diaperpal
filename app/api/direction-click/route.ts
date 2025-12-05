@@ -9,11 +9,15 @@ export async function POST(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
   try {
-    const { venue_id } = await request.json()
+    const { venue_id, source } = await request.json()
 
     if (!venue_id) {
       return NextResponse.json({ error: 'venue_id is required' }, { status: 400 })
     }
+
+    // Validate source - defaults to 'list' in database
+    const validSources = ['list', 'map', 'detail']
+    const clickSource = validSources.includes(source) ? source : 'list'
 
     // Get user agent and hash IP for privacy
     const userAgent = request.headers.get('user-agent') || null
@@ -25,6 +29,7 @@ export async function POST(request: NextRequest) {
       .from('direction_clicks')
       .insert({
         venue_id,
+        source: clickSource,
         user_agent: userAgent,
         ip_hash: ipHash,
       })
