@@ -3,10 +3,10 @@ import Link from 'next/link'
 export default function Home() {
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 py-12">
-      <div className="max-w-lg w-full text-center">
+      <div className="max-w-xl w-full text-center">
         {/* Headline */}
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-          Looking for a Diaper Changing Station?
+          Need a Diaper Changing Station?
         </h1>
 
         {/* Subtitle */}
