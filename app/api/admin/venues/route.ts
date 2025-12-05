@@ -11,9 +11,17 @@ export async function POST(request: NextRequest) {
 
   const { user, supabase } = authResult
 
+  // Validate user ID exists
+  const userId = user.user?.id
+  if (!userId) {
+    console.error('User ID is missing from auth result:', JSON.stringify(user, null, 2))
+    return NextResponse.json(
+      { error: 'Authentication error: User ID not found' },
+      { status: 401 }
+    )
+  }
+
   // Use service client for venue creation because we need to bypass RLS
-  // to allow the set_submitted_by trigger to work properly
-  // The trigger uses auth.uid() which is set from the JWT
   const serviceClient = getServiceClient()
 
   try {
@@ -84,7 +92,7 @@ export async function POST(request: NextRequest) {
         rating: place.rating || null,
         review_count: place.user_ratings_total || null,
         photo_urls,
-        submitted_by: user.user.id,
+        submitted_by: userId,
         google_data_refreshed_at: new Date().toISOString(),
       })
       .select()
