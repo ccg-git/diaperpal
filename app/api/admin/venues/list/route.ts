@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireReviewer } from '@/lib/auth-helpers'
+import { requireAuth, getServiceClient } from '@/lib/auth-helpers'
 
 export async function GET(request: NextRequest) {
-  // Require reviewer or admin role to list venues
-  const authResult = await requireReviewer(request)
+  // Require authenticated user
+  const authResult = await requireAuth(request)
   if (!authResult.success) {
     return authResult.response
   }
 
-  // Use the authenticated client - RLS allows reviewers to see all venues
-  const { supabase } = authResult
+  // Use service client to get all venues
+  const supabase = getServiceClient()
 
   try {
     // Get all venues with restroom count
