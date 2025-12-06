@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireReviewer, getServiceClient } from '@/lib/auth-helpers'
+import { requireAuth, getServiceClient } from '@/lib/auth-helpers'
 
 export async function GET(request: NextRequest) {
-  // Require reviewer or admin role to view stats
-  const authResult = await requireReviewer(request)
+  // Require authenticated user
+  const authResult = await requireAuth(request)
   if (!authResult.success) {
     return authResult.response
   }
 
-  // Use service client for stats since we need to count all records
+  // Use service client for stats
   const supabase = getServiceClient()
 
   try {

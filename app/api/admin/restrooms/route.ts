@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Gender, StationLocation, VerificationStatus } from '@/lib/types'
-import { requireReviewer } from '@/lib/auth-helpers'
+import { requireAuth, getServiceClient } from '@/lib/auth-helpers'
 
 export async function POST(request: NextRequest) {
-  // Require reviewer or admin role
-  const authResult = await requireReviewer(request)
+  // Require authenticated user
+  const authResult = await requireAuth(request)
   if (!authResult.success) {
     return authResult.response
   }
 
-  const { user, supabase } = authResult
+  // Use service client for restroom creation
+  const supabase = getServiceClient()
 
   try {
     const body = await request.json()
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Venue not found' }, { status: 404 })
     }
 
-    // Create restroom with audit fields
+    // Create restroom
     const { data: restroom, error: insertError } = await supabase
       .from('restrooms')
       .insert({
@@ -82,8 +83,6 @@ export async function POST(request: NextRequest) {
         safety_notes: safety_notes || null,
         admin_notes: admin_notes || null,
         verified_at: status === 'verified_present' ? new Date().toISOString() : null,
-        verified_by_user_id: status === 'verified_present' ? user.user.id : null,
-        created_by_user_id: user.user.id,
       })
       .select()
       .single()
@@ -106,7 +105,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET - List restrooms for a venue (public read, RLS handles access)
+// GET - List restrooms for a venue (public read)
 export async function GET(request: NextRequest) {
   const venueId = request.nextUrl.searchParams.get('venue_id')
 

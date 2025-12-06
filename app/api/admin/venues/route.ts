@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { VenueType } from '@/lib/types'
-import { requireReviewer, getServiceClient } from '@/lib/auth-helpers'
+import { requireAuth, getServiceClient } from '@/lib/auth-helpers'
 
 export async function POST(request: NextRequest) {
-  // Require reviewer or admin role
-  const authResult = await requireReviewer(request)
+  // Require authenticated user
+  const authResult = await requireAuth(request)
   if (!authResult.success) {
     return authResult.response
   }
 
-  const { user, supabase } = authResult
-
-  // Use service client for venue creation because we need to bypass RLS
-  // to allow the set_submitted_by trigger to work properly
-  // The trigger uses auth.uid() which is set from the JWT
+  // Use service client for venue creation to bypass RLS
   const serviceClient = getServiceClient()
 
   try {
@@ -68,8 +64,7 @@ export async function POST(request: NextRequest) {
       `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${p.photo_reference}&key=${googleApiKey}`
     ) || []
 
-    // Create venue in database using service client
-    // We set submitted_by explicitly since service client doesn't have auth context
+    // Create venue in database
     const { data: venue, error: insertError } = await serviceClient
       .from('venues')
       .insert({
@@ -84,7 +79,6 @@ export async function POST(request: NextRequest) {
         rating: place.rating || null,
         review_count: place.user_ratings_total || null,
         photo_urls,
-        submitted_by: user.user.id,
         google_data_refreshed_at: new Date().toISOString(),
       })
       .select()
@@ -96,14 +90,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { error: 'Venue with this place_id already exists' },
           { status: 409 }
-        )
-      }
-      // Check for foreign key constraint violation (user profile doesn't exist)
-      if (insertError.code === '23503') {
-        console.error('Foreign key constraint violation - user profile may not exist:', insertError)
-        return NextResponse.json(
-          { error: 'User profile not found. Please ensure your account is properly set up.' },
-          { status: 400 }
         )
       }
       console.error('Error creating venue:', insertError.code, insertError.message, insertError.details)

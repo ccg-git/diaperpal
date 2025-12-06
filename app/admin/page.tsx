@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useJsApiLoader, Autocomplete } from '@react-google-maps/api'
 import { Session, User } from '@supabase/supabase-js'
-import { createBrowserClient, UserRole, isReviewer } from '@/lib/supabase-auth'
+import { createBrowserClient } from '@/lib/supabase-auth'
 import {
   VenueType,
   Gender,
@@ -64,7 +64,6 @@ type ActiveTab = 'add-venue' | 'add-restroom' | 'browse'
 export default function AdminPage() {
   // Auth state
   const [session, setSession] = useState<Session | null>(null)
-  const [userRole, setUserRole] = useState<UserRole | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [authError, setAuthError] = useState('')
 
@@ -124,62 +123,33 @@ export default function AdminPage() {
     const supabase = getSupabase()
 
     // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if (session) {
-        await fetchUserRole(session.user.id)
-      }
       setAuthLoading(false)
     })
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         setSession(session)
-        if (session) {
-          await fetchUserRole(session.user.id)
-        } else {
-          setUserRole(null)
-        }
       }
     )
 
     return () => subscription.unsubscribe()
   }, [])
 
-  // Fetch user role from profiles table
-  async function fetchUserRole(userId: string) {
-    const supabase = getSupabase()
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .single()
-
-    if (error) {
-      console.error('Error fetching user role:', error)
-      setUserRole('user')
-      return
-    }
-
-    setUserRole(data.role as UserRole)
-  }
-
   // Get access token for API calls
   function getAccessToken(): string | null {
     return session?.access_token ?? null
   }
 
-  // Check if user has required role
-  const hasAccess = session && userRole && isReviewer(userRole)
-
-  // Fetch stats and venues when authenticated with proper role
+  // Fetch stats and venues when authenticated
   useEffect(() => {
-    if (hasAccess) {
+    if (session) {
       fetchStats()
       fetchExistingVenues()
     }
-  }, [hasAccess])
+  }, [session])
 
   async function fetchStats() {
     const token = getAccessToken()
@@ -247,7 +217,6 @@ export default function AdminPage() {
     const supabase = getSupabase()
     await supabase.auth.signOut()
     setSession(null)
-    setUserRole(null)
     resetForm()
   }
 
@@ -415,8 +384,8 @@ export default function AdminPage() {
     )
   }
 
-  // Login screen - show if not authenticated or wrong role
-  if (!session || !userRole) {
+  // Login screen - show if not authenticated
+  if (!session) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
@@ -463,30 +432,6 @@ export default function AdminPage() {
     )
   }
 
-  // Access denied - authenticated but wrong role
-  if (!isReviewer(userRole)) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md text-center">
-          <span className="text-4xl">🚫</span>
-          <h1 className="text-2xl font-bold text-gray-900 mt-4">Access Denied</h1>
-          <p className="text-gray-500 mt-2">
-            Your account doesn't have permission to access the admin panel.
-          </p>
-          <p className="text-gray-400 text-sm mt-1">
-            Signed in as: {session.user.email}
-          </p>
-          <button
-            onClick={handleLogout}
-            className="mt-6 text-teal-600 hover:text-teal-700 font-medium"
-          >
-            Sign out and try another account
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   if (loadError) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -525,7 +470,6 @@ export default function AdminPage() {
           <div className="flex items-center gap-4">
             <div className="text-right">
               <p className="text-sm text-gray-700">{session.user.email}</p>
-              <p className="text-xs text-gray-500 capitalize">{userRole} role</p>
             </div>
             <button
               onClick={handleLogout}
