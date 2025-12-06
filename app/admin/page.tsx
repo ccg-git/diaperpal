@@ -1032,7 +1032,7 @@ function RestroomFormComponent({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Verification Status
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() =>
@@ -1041,7 +1041,7 @@ function RestroomFormComponent({
                     status: 'verified_present',
                   }))
                 }
-                className={`py-3 px-4 rounded-lg font-medium transition ${
+                className={`py-3 px-2 rounded-lg font-medium transition text-sm ${
                   restroomForm.status === 'verified_present'
                     ? 'bg-green-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1057,13 +1057,29 @@ function RestroomFormComponent({
                     status: 'unverified',
                   }))
                 }
-                className={`py-3 px-4 rounded-lg font-medium transition ${
+                className={`py-3 px-2 rounded-lg font-medium transition text-sm ${
                   restroomForm.status === 'unverified'
                     ? 'bg-amber-500 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
                 ❓ Unverified
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setRestroomForm((prev) => ({
+                    ...prev,
+                    status: 'verified_absent',
+                  }))
+                }
+                className={`py-3 px-2 rounded-lg font-medium transition text-sm ${
+                  restroomForm.status === 'verified_absent'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                ❌ Verified Absent
               </button>
             </div>
           </div>
