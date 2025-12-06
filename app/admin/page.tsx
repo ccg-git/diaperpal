@@ -123,10 +123,18 @@ export default function AdminPage() {
     const supabase = getSupabase()
 
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setAuthLoading(false)
-    })
+    supabase.auth.getSession()
+      .then(({ data: { session }, error }) => {
+        if (error) {
+          console.error('Error getting session:', error)
+        }
+        setSession(session)
+        setAuthLoading(false)
+      })
+      .catch((err) => {
+        console.error('Failed to get session:', err)
+        setAuthLoading(false)
+      })
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
