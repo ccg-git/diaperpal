@@ -5,13 +5,14 @@ import {
   VENUE_TYPE_CONFIG,
   GENDER_CONFIG,
   STATION_LOCATION_CONFIG,
+  STATUS_CONFIG,
   VenueType,
   Gender,
   StationLocation,
   VerificationStatus,
   HoursJson,
 } from '@/lib/types'
-import { formatTime, getFormattedWeeklyHours, isVenueOpen, getTodayHours } from '@/lib/utils'
+import { formatTime, getFormattedWeeklyHours, isVenueOpen, getTodayHours, getStatusByGender } from '@/lib/utils'
 import DirectionsButton from './DirectionsButton'
 
 interface Restroom {
@@ -166,9 +167,28 @@ export default async function LocationDetailPage({
 
         {/* Changing Stations Section */}
         <div className="p-6 bg-white border-t border-gray-200">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">
+          <h2 className="text-lg font-bold text-gray-900 mb-3">
             Changing Stations ({venue.restrooms.length})
           </h2>
+
+          {/* Summary Banner */}
+          {venue.restrooms.length > 0 && (
+            <div className="flex items-center gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm text-gray-600 font-medium">Stations:</span>
+              <div className="flex items-center gap-3">
+                {getStatusByGender(venue.restrooms).map(({ gender, status }) => (
+                  <span
+                    key={gender}
+                    className="inline-flex items-center gap-1 text-lg"
+                    title={`${GENDER_CONFIG[gender]?.label}: ${STATUS_CONFIG[status]?.label}`}
+                  >
+                    <span>{GENDER_CONFIG[gender]?.emoji}</span>
+                    <span>{STATUS_CONFIG[status]?.emoji}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Verified Section */}
           {verifiedRestrooms.length > 0 && (
@@ -177,62 +197,71 @@ export default async function LocationDetailPage({
                 <span className="w-2 h-2 bg-green-500 rounded-full" />
                 Verified ({verifiedRestrooms.length})
               </h3>
-              <div className="space-y-3">
-                {verifiedRestrooms.map((restroom) => (
-                  <div
-                    key={restroom.id}
-                    className="bg-white rounded-xl border border-gray-200 overflow-hidden"
-                  >
-                    <div className="p-4">
-                      {/* Gender + Privacy chips */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 border border-teal-200 text-teal-800 rounded-full text-sm font-medium">
-                          {GENDER_CONFIG[restroom.gender].emoji} {GENDER_CONFIG[restroom.gender].label}
-                        </span>
-                        <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 border border-gray-200 text-gray-700 rounded-full text-sm">
-                          {STATION_LOCATION_CONFIG[restroom.station_location].emoji}{' '}
-                          {STATION_LOCATION_CONFIG[restroom.station_location].label}
-                        </span>
-                      </div>
 
-                      {/* Verification status */}
-                      <p className="text-sm text-green-600 mt-2">
-                        ✓ Station confirmed
-                      </p>
+              {/* Group by gender, then sort by location */}
+              {(['mens', 'womens', 'all_gender'] as Gender[]).map((gender) => {
+                const genderRestrooms = verifiedRestrooms
+                  .filter((r) => r.gender === gender)
+                  .sort((a, b) => (a.restroom_location_text || '').localeCompare(b.restroom_location_text || ''))
 
-                      {/* Location notes */}
-                      {restroom.restroom_location_text && (
-                        <p className="text-sm text-gray-600 mt-2 bg-gray-50 rounded-lg px-3 py-2">
-                          📍 {restroom.restroom_location_text}
-                        </p>
-                      )}
+                if (genderRestrooms.length === 0) return null
 
-                      {/* Tips/safety notes for this restroom */}
-                      {restroom.safety_notes && (
-                        <p className="text-sm text-amber-700 mt-2 bg-amber-50 rounded-lg px-3 py-2">
-                          💡 {restroom.safety_notes}
-                        </p>
-                      )}
-                    </div>
+                return (
+                  <div key={gender} className="mb-4 last:mb-0">
+                    {/* Gender subheader */}
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+                      {GENDER_CONFIG[gender].emoji} {GENDER_CONFIG[gender].label}
+                    </h4>
 
-                    {/* Restroom photos */}
-                    {restroom.photos && restroom.photos.length > 0 && (
-                      <div className="border-t border-gray-100 px-4 py-3 bg-gray-50">
-                        <div className="flex gap-2 overflow-x-auto">
-                          {restroom.photos.map((photo) => (
-                            <img
-                              key={photo.id}
-                              src={photo.image_url}
-                              alt="Changing station"
-                              className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
-                            />
-                          ))}
+                    <div className="space-y-2 ml-1">
+                      {genderRestrooms.map((restroom) => (
+                        <div
+                          key={restroom.id}
+                          className="bg-white rounded-xl border border-gray-200 overflow-hidden"
+                        >
+                          <div className="p-4">
+                            {/* Station location chip */}
+                            <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 border border-gray-200 text-gray-700 rounded-full text-sm">
+                              {STATION_LOCATION_CONFIG[restroom.station_location].emoji}{' '}
+                              {STATION_LOCATION_CONFIG[restroom.station_location].label}
+                            </span>
+
+                            {/* Location notes */}
+                            {restroom.restroom_location_text && (
+                              <p className="text-sm text-gray-600 mt-2 bg-gray-50 rounded-lg px-3 py-2">
+                                📍 {restroom.restroom_location_text}
+                              </p>
+                            )}
+
+                            {/* Tips/safety notes for this restroom */}
+                            {restroom.safety_notes && (
+                              <p className="text-sm text-amber-700 mt-2 bg-amber-50 rounded-lg px-3 py-2">
+                                💡 {restroom.safety_notes}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Restroom photos */}
+                          {restroom.photos && restroom.photos.length > 0 && (
+                            <div className="border-t border-gray-100 px-4 py-3 bg-gray-50">
+                              <div className="flex gap-2 overflow-x-auto">
+                                {restroom.photos.map((photo) => (
+                                  <img
+                                    key={photo.id}
+                                    src={photo.image_url}
+                                    alt="Changing station"
+                                    className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      ))}
+                    </div>
                   </div>
-                ))}
-              </div>
+                )
+              })}
             </div>
           )}
 
@@ -243,30 +272,51 @@ export default async function LocationDetailPage({
                 <span className="w-2 h-2 bg-gray-400 rounded-full" />
                 Unverified ({unverifiedRestrooms.length})
               </h3>
-              <div className="space-y-3">
-                {unverifiedRestrooms.map((restroom) => (
-                  <div
-                    key={restroom.id}
-                    className="bg-gray-50 rounded-xl border border-gray-200 p-4"
-                  >
-                    {/* Gender + Privacy chips */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-300 text-gray-600 rounded-full text-sm font-medium">
-                        {GENDER_CONFIG[restroom.gender].emoji} {GENDER_CONFIG[restroom.gender].label}
-                      </span>
-                      <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 border border-gray-200 text-gray-600 rounded-full text-sm">
-                        {STATION_LOCATION_CONFIG[restroom.station_location].emoji}{' '}
-                        {STATION_LOCATION_CONFIG[restroom.station_location].label}
-                      </span>
-                    </div>
 
-                    {/* Unverified status */}
-                    <p className="text-sm text-gray-500 mt-2">
-                      ? Needs verification
-                    </p>
+              {/* Group by gender, then sort by location */}
+              {(['mens', 'womens', 'all_gender'] as Gender[]).map((gender) => {
+                const genderRestrooms = unverifiedRestrooms
+                  .filter((r) => r.gender === gender)
+                  .sort((a, b) => (a.restroom_location_text || '').localeCompare(b.restroom_location_text || ''))
+
+                if (genderRestrooms.length === 0) return null
+
+                return (
+                  <div key={gender} className="mb-4 last:mb-0">
+                    {/* Gender subheader */}
+                    <h4 className="text-sm font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
+                      {GENDER_CONFIG[gender].emoji} {GENDER_CONFIG[gender].label}
+                    </h4>
+
+                    <div className="space-y-2 ml-1">
+                      {genderRestrooms.map((restroom) => (
+                        <div
+                          key={restroom.id}
+                          className="bg-gray-50 rounded-xl border border-gray-200 p-4"
+                        >
+                          {/* Station location chip */}
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 border border-gray-200 text-gray-600 rounded-full text-sm">
+                            {STATION_LOCATION_CONFIG[restroom.station_location].emoji}{' '}
+                            {STATION_LOCATION_CONFIG[restroom.station_location].label}
+                          </span>
+
+                          {/* Location notes */}
+                          {restroom.restroom_location_text && (
+                            <p className="text-sm text-gray-500 mt-2 bg-gray-100 rounded-lg px-3 py-2">
+                              📍 {restroom.restroom_location_text}
+                            </p>
+                          )}
+
+                          {/* Unverified status */}
+                          <p className="text-sm text-gray-500 mt-2">
+                            ? Needs verification
+                          </p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
-              </div>
+                )
+              })}
             </div>
           )}
 

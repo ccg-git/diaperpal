@@ -1,6 +1,6 @@
 // DiaperPal Utility Functions
 
-import { HoursJson, DayHours, VenueType, Gender, StationLocation } from './types'
+import { HoursJson, DayHours, VenueType, Gender, StationLocation, VerificationStatus } from './types'
 
 // ============================================
 // Distance Formatting
@@ -163,6 +163,43 @@ export function getGenderLabel(gender: Gender): string {
     all_gender: 'All-Gender',
   }
   return labels[gender] || gender
+}
+
+/**
+ * Get the best status per gender from a list of restrooms
+ * Priority: verified_present > unverified (verified_absent excluded from input)
+ * Returns only genders that have at least one station
+ */
+export function getStatusByGender(
+  restrooms: Array<{ gender: Gender; status: VerificationStatus }>
+): Array<{ gender: Gender; status: VerificationStatus }> {
+  const genderOrder: Gender[] = ['mens', 'womens', 'all_gender']
+  const statusPriority: Record<VerificationStatus, number> = {
+    verified_present: 2,
+    unverified: 1,
+    verified_absent: 0,
+  }
+
+  // Group by gender and find best status
+  const bestByGender = new Map<Gender, VerificationStatus>()
+
+  for (const restroom of restrooms) {
+    // Skip verified_absent stations
+    if (restroom.status === 'verified_absent') continue
+
+    const current = bestByGender.get(restroom.gender)
+    if (!current || statusPriority[restroom.status] > statusPriority[current]) {
+      bestByGender.set(restroom.gender, restroom.status)
+    }
+  }
+
+  // Return in consistent order (mens, womens, all_gender)
+  return genderOrder
+    .filter((gender) => bestByGender.has(gender))
+    .map((gender) => ({
+      gender,
+      status: bestByGender.get(gender)!,
+    }))
 }
 
 // ============================================

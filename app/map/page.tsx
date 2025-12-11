@@ -14,7 +14,7 @@ import {
   STATION_LOCATION_CONFIG,
   STATUS_CONFIG,
 } from '@/lib/types'
-import { formatTime } from '@/lib/utils'
+import { formatTime, getStatusByGender } from '@/lib/utils'
 
 const libraries: ('places')[] = ['places']
 
@@ -527,32 +527,17 @@ export default function MapPage() {
                       )}
                     </div>
 
-                    {/* Restrooms */}
-                    <div className="mt-3 space-y-2">
-                      {displayRestrooms.map((restroom) => (
-                        <div
-                          key={restroom.id}
-                          className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2"
+                    {/* Station Status Badges */}
+                    <div className="mt-3 flex items-center gap-3">
+                      {getStatusByGender(displayRestrooms).map(({ gender, status }) => (
+                        <span
+                          key={gender}
+                          className="inline-flex items-center gap-1 text-lg"
+                          title={`${GENDER_CONFIG[gender]?.label}: ${STATUS_CONFIG[status]?.label}`}
                         >
-                          <div className="flex items-center gap-2 text-sm">
-                            <span>{GENDER_CONFIG[restroom.gender]?.emoji}</span>
-                            <span className="font-medium text-gray-900">
-                              {GENDER_CONFIG[restroom.gender]?.label}
-                            </span>
-                            <span className="text-gray-300">·</span>
-                            <span className="text-gray-600">
-                              {STATION_LOCATION_CONFIG[restroom.station_location]?.emoji}{' '}
-                              {STATION_LOCATION_CONFIG[restroom.station_location]?.label}
-                            </span>
-                          </div>
-                          <span>
-                            {restroom.status === 'verified_present' ? (
-                              <span className="text-green-600" title="Verified">✅</span>
-                            ) : (
-                              <span className="text-gray-400 text-xs">❓</span>
-                            )}
-                          </span>
-                        </div>
+                          <span>{GENDER_CONFIG[gender]?.emoji}</span>
+                          <span>{STATUS_CONFIG[status]?.emoji}</span>
+                        </span>
                       ))}
                     </div>
 
@@ -663,6 +648,19 @@ export default function MapPage() {
                     <span className="bg-teal-100 text-teal-700 font-semibold text-sm px-2.5 py-1 rounded-full">
                       📍 {selectedVenue.distance_display}
                     </span>
+                  </div>
+                  {/* Station Status Badges */}
+                  <div className="mt-2 flex items-center gap-3">
+                    {getStatusByGender(selectedVenue.restrooms).map(({ gender, status }) => (
+                      <span
+                        key={gender}
+                        className="inline-flex items-center gap-1 text-lg"
+                        title={`${GENDER_CONFIG[gender]?.label}: ${STATUS_CONFIG[status]?.label}`}
+                      >
+                        <span>{GENDER_CONFIG[gender]?.emoji}</span>
+                        <span>{STATUS_CONFIG[status]?.emoji}</span>
+                      </span>
+                    ))}
                   </div>
                   <div className="mt-3 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm">
