@@ -102,6 +102,10 @@ export async function GET(request: NextRequest) {
       })
       // Apply filters
       .filter((venue: { venue_type: VenueType; is_open: boolean; restrooms: RestroomWithPhotos[] }) => {
+        // Only show venues that have at least one visible station
+        // (verified_present or unverified - verified_absent are already filtered out above)
+        if (venue.restrooms.length === 0) return false
+
         // Venue type filter
         if (venueTypes && venueTypes.length > 0) {
           if (!venueTypes.includes(venue.venue_type)) return false

@@ -12,6 +12,7 @@ import {
   VENUE_TYPE_CONFIG,
   GENDER_CONFIG,
   STATION_LOCATION_CONFIG,
+  STATUS_CONFIG,
 } from '@/lib/types'
 
 const libraries: ('places')[] = ['places']
@@ -51,12 +52,29 @@ interface Stats {
   recentVenues: { id: string; name: string; venue_type: VenueType }[]
 }
 
+interface ExistingRestroom {
+  id: string
+  gender: Gender
+  station_location: StationLocation
+  restroom_location_text: string | null
+  status: VerificationStatus
+  has_safety_concern: boolean
+  safety_concern_notes: string | null
+  has_cleanliness_issue: boolean
+  cleanliness_issue_notes: string | null
+  additional_notes: string | null
+  safety_notes: string | null
+  admin_notes: string | null
+  created_at: string
+}
+
 interface ExistingVenue {
   id: string
   name: string
   address: string
   venue_type: VenueType
   restroom_count: number
+  restrooms: ExistingRestroom[]
 }
 
 type ActiveTab = 'add-venue' | 'add-restroom' | 'browse'
@@ -92,6 +110,41 @@ export default function AdminPage() {
   const [existingVenues, setExistingVenues] = useState<ExistingVenue[]>([])
   const [venuesLoading, setVenuesLoading] = useState(false)
   const [selectedExistingVenue, setSelectedExistingVenue] = useState<ExistingVenue | null>(null)
+
+  // Browse tab - search and expand state
+  const [venueSearch, setVenueSearch] = useState('')
+  const [expandedVenueId, setExpandedVenueId] = useState<string | null>(null)
+
+  // Edit venue state
+  const [editingVenueId, setEditingVenueId] = useState<string | null>(null)
+  const [editVenueType, setEditVenueType] = useState<VenueType>('food_drink')
+  const [editVenueLoading, setEditVenueLoading] = useState(false)
+
+  // Delete venue state
+  const [deleteVenueConfirm, setDeleteVenueConfirm] = useState<ExistingVenue | null>(null)
+  const [deleteVenueLoading, setDeleteVenueLoading] = useState(false)
+
+  // Edit restroom state
+  const [editingRestroomId, setEditingRestroomId] = useState<string | null>(null)
+  const [editRestroomForm, setEditRestroomForm] = useState<RestroomForm>({
+    gender: 'mens',
+    station_location: 'single_restroom',
+    restroom_location_text: '',
+    status: 'verified_present',
+    has_safety_concern: false,
+    safety_concern_notes: '',
+    has_cleanliness_issue: false,
+    cleanliness_issue_notes: '',
+    additional_notes: '',
+  })
+  const [editRestroomLoading, setEditRestroomLoading] = useState(false)
+
+  // Delete restroom state
+  const [deleteRestroomConfirm, setDeleteRestroomConfirm] = useState<{ restroom: ExistingRestroom; venueName: string } | null>(null)
+  const [deleteRestroomLoading, setDeleteRestroomLoading] = useState(false)
+
+  // Add restroom to specific venue (from browse tab)
+  const [addRestroomToVenueId, setAddRestroomToVenueId] = useState<string | null>(null)
 
   // Restroom state
   const [restrooms, setRestrooms] = useState<CreatedRestroom[]>([])
@@ -374,6 +427,181 @@ export default function AdminPage() {
       setRestroomLoading(false)
     }
   }
+
+  // Edit venue handler
+  async function handleEditVenue(venueId: string) {
+    const token = getAccessToken()
+    if (!token) return
+
+    setEditVenueLoading(true)
+    try {
+      const res = await fetch(`/api/admin/venues/${venueId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ venue_type: editVenueType }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to update venue')
+
+      // Update local state
+      setExistingVenues((prev) =>
+        prev.map((v) =>
+          v.id === venueId ? { ...v, venue_type: editVenueType } : v
+        )
+      )
+      setEditingVenueId(null)
+      fetchStats()
+    } catch (error) {
+      console.error('Error updating venue:', error)
+      alert(error instanceof Error ? error.message : 'Failed to update venue')
+    } finally {
+      setEditVenueLoading(false)
+    }
+  }
+
+  // Delete venue handler
+  async function handleDeleteVenue(venue: ExistingVenue) {
+    const token = getAccessToken()
+    if (!token) return
+
+    setDeleteVenueLoading(true)
+    try {
+      const res = await fetch(`/api/admin/venues/${venue.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to delete venue')
+
+      // Update local state
+      setExistingVenues((prev) => prev.filter((v) => v.id !== venue.id))
+      setDeleteVenueConfirm(null)
+      setExpandedVenueId(null)
+      fetchStats()
+    } catch (error) {
+      console.error('Error deleting venue:', error)
+      alert(error instanceof Error ? error.message : 'Failed to delete venue')
+    } finally {
+      setDeleteVenueLoading(false)
+    }
+  }
+
+  // Start editing restroom
+  function startEditRestroom(restroom: ExistingRestroom) {
+    setEditingRestroomId(restroom.id)
+    setEditRestroomForm({
+      gender: restroom.gender,
+      station_location: restroom.station_location,
+      restroom_location_text: restroom.restroom_location_text || '',
+      status: restroom.status,
+      has_safety_concern: restroom.has_safety_concern || false,
+      safety_concern_notes: restroom.safety_concern_notes || '',
+      has_cleanliness_issue: restroom.has_cleanliness_issue || false,
+      cleanliness_issue_notes: restroom.cleanliness_issue_notes || '',
+      additional_notes: restroom.additional_notes || '',
+    })
+  }
+
+  // Edit restroom handler
+  async function handleEditRestroom(restroomId: string) {
+    const token = getAccessToken()
+    if (!token) return
+
+    setEditRestroomLoading(true)
+    try {
+      const res = await fetch(`/api/admin/restrooms/${restroomId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          gender: editRestroomForm.gender,
+          station_location: editRestroomForm.station_location,
+          restroom_location_text: editRestroomForm.restroom_location_text || null,
+          status: editRestroomForm.status,
+          has_safety_concern: editRestroomForm.has_safety_concern,
+          has_cleanliness_issue: editRestroomForm.has_cleanliness_issue,
+          admin_notes: editRestroomForm.additional_notes || null,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to update restroom')
+
+      // Update local state
+      setExistingVenues((prev) =>
+        prev.map((venue) => ({
+          ...venue,
+          restrooms: venue.restrooms.map((r) =>
+            r.id === restroomId
+              ? {
+                  ...r,
+                  gender: editRestroomForm.gender,
+                  station_location: editRestroomForm.station_location,
+                  restroom_location_text: editRestroomForm.restroom_location_text || null,
+                  status: editRestroomForm.status,
+                  has_safety_concern: editRestroomForm.has_safety_concern,
+                  has_cleanliness_issue: editRestroomForm.has_cleanliness_issue,
+                  additional_notes: editRestroomForm.additional_notes || null,
+                }
+              : r
+          ),
+        }))
+      )
+      setEditingRestroomId(null)
+      fetchStats()
+    } catch (error) {
+      console.error('Error updating restroom:', error)
+      alert(error instanceof Error ? error.message : 'Failed to update restroom')
+    } finally {
+      setEditRestroomLoading(false)
+    }
+  }
+
+  // Delete restroom handler
+  async function handleDeleteRestroom(restroomId: string) {
+    const token = getAccessToken()
+    if (!token) return
+
+    setDeleteRestroomLoading(true)
+    try {
+      const res = await fetch(`/api/admin/restrooms/${restroomId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to delete restroom')
+
+      // Update local state
+      setExistingVenues((prev) =>
+        prev.map((venue) => ({
+          ...venue,
+          restrooms: venue.restrooms.filter((r) => r.id !== restroomId),
+          restroom_count: venue.restrooms.filter((r) => r.id !== restroomId).length,
+        }))
+      )
+      setDeleteRestroomConfirm(null)
+      fetchStats()
+    } catch (error) {
+      console.error('Error deleting restroom:', error)
+      alert(error instanceof Error ? error.message : 'Failed to delete restroom')
+    } finally {
+      setDeleteRestroomLoading(false)
+    }
+  }
+
+  // Filter venues by search
+  const filteredVenues = existingVenues.filter((venue) =>
+    venue.name.toLowerCase().includes(venueSearch.toLowerCase()) ||
+    venue.address.toLowerCase().includes(venueSearch.toLowerCase())
+  )
 
   // Loading state
   if (authLoading) {
@@ -737,46 +965,500 @@ export default function AdminPage() {
 
         {/* Browse Venues Tab */}
         {activeTab === 'browse' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">
-              All Venues ({existingVenues.length})
-            </h2>
+          <div className="space-y-4">
+            {/* Search Bar */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <input
+                type="text"
+                value={venueSearch}
+                onChange={(e) => setVenueSearch(e.target.value)}
+                placeholder="Search venues by name or address..."
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+              />
+              <p className="text-sm text-gray-500 mt-2">
+                Showing {filteredVenues.length} of {existingVenues.length} venues
+              </p>
+            </div>
+
+            {/* Venues List */}
             {venuesLoading ? (
-              <p className="text-gray-500">Loading...</p>
-            ) : existingVenues.length === 0 ? (
-              <p className="text-gray-500">No venues yet.</p>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <p className="text-gray-500">Loading...</p>
+              </div>
+            ) : filteredVenues.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <p className="text-gray-500">
+                  {existingVenues.length === 0 ? 'No venues yet.' : 'No venues match your search.'}
+                </p>
+              </div>
             ) : (
               <div className="space-y-3">
-                {existingVenues.map((venue) => (
+                {filteredVenues.map((venue) => (
                   <div
                     key={venue.id}
-                    className="p-4 rounded-lg border border-gray-200 hover:border-gray-300 transition"
+                    className={`bg-white rounded-xl shadow-sm border transition ${
+                      expandedVenueId === venue.id ? 'border-teal-400' : 'border-gray-200'
+                    }`}
                   >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-semibold text-gray-900">{venue.name}</p>
-                        <p className="text-sm text-gray-500 mt-0.5">{venue.address}</p>
-                        <div className="flex items-center gap-3 mt-2">
-                          <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                            {VENUE_TYPE_CONFIG[venue.venue_type]?.emoji}{' '}
-                            {VENUE_TYPE_CONFIG[venue.venue_type]?.label}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {venue.restroom_count} changing station{venue.restroom_count !== 1 ? 's' : ''}
-                          </span>
+                    {/* Venue Header */}
+                    <div
+                      className="p-4 cursor-pointer"
+                      onClick={() => setExpandedVenueId(expandedVenueId === venue.id ? null : venue.id)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-gray-900">{venue.name}</p>
+                            <span className="text-gray-400">
+                              {expandedVenueId === venue.id ? '▲' : '▼'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-500 mt-0.5">{venue.address}</p>
+                          <div className="flex items-center gap-3 mt-2">
+                            <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                              {VENUE_TYPE_CONFIG[venue.venue_type]?.emoji}{' '}
+                              {VENUE_TYPE_CONFIG[venue.venue_type]?.label}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {venue.restroom_count} station{venue.restroom_count !== 1 ? 's' : ''}
+                            </span>
+                          </div>
                         </div>
+                        <a
+                          href={`/location/${venue.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-teal-600 hover:text-teal-700 text-sm font-medium"
+                        >
+                          View →
+                        </a>
                       </div>
-                      <a
-                        href={`/location/${venue.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-teal-600 hover:text-teal-700 text-sm font-medium"
-                      >
-                        View →
-                      </a>
                     </div>
+
+                    {/* Expanded Content */}
+                    {expandedVenueId === venue.id && (
+                      <div className="border-t border-gray-200 p-4">
+                        {/* Venue Actions */}
+                        <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
+                          {editingVenueId === venue.id ? (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm text-gray-600">Type:</span>
+                              {(Object.entries(VENUE_TYPE_CONFIG) as [VenueType, { emoji: string; label: string }][]).map(
+                                ([type, config]) => (
+                                  <button
+                                    key={type}
+                                    type="button"
+                                    onClick={() => setEditVenueType(type)}
+                                    className={`px-3 py-1.5 rounded text-sm font-medium transition ${
+                                      editVenueType === type
+                                        ? 'bg-teal-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                  >
+                                    {config.emoji} {config.label}
+                                  </button>
+                                )
+                              )}
+                              <button
+                                onClick={() => handleEditVenue(venue.id)}
+                                disabled={editVenueLoading}
+                                className="px-3 py-1.5 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 disabled:bg-gray-400"
+                              >
+                                {editVenueLoading ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                onClick={() => setEditingVenueId(null)}
+                                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-sm font-medium hover:bg-gray-300"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setEditingVenueId(venue.id)
+                                  setEditVenueType(venue.venue_type)
+                                }}
+                                className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded text-sm font-medium hover:bg-gray-200"
+                              >
+                                Edit Venue Type
+                              </button>
+                              <button
+                                onClick={() => setDeleteVenueConfirm(venue)}
+                                className="px-3 py-1.5 bg-red-100 text-red-700 rounded text-sm font-medium hover:bg-red-200"
+                              >
+                                Delete Venue
+                              </button>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Stations List */}
+                        <div className="mb-4">
+                          <h4 className="font-medium text-gray-900 mb-3">
+                            Changing Stations ({venue.restrooms.length})
+                          </h4>
+                          {venue.restrooms.length === 0 ? (
+                            <p className="text-sm text-gray-500 italic">No stations added yet.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {venue.restrooms.map((restroom) => (
+                                <div
+                                  key={restroom.id}
+                                  className="p-3 bg-gray-50 rounded-lg"
+                                >
+                                  {editingRestroomId === restroom.id ? (
+                                    /* Edit Restroom Form */
+                                    <div className="space-y-3">
+                                      {/* Gender */}
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Gender</label>
+                                        <div className="flex gap-2">
+                                          {(Object.entries(GENDER_CONFIG) as [Gender, { emoji: string; label: string }][]).map(
+                                            ([gender, config]) => (
+                                              <button
+                                                key={gender}
+                                                type="button"
+                                                onClick={() => setEditRestroomForm((prev) => ({ ...prev, gender }))}
+                                                className={`px-3 py-1.5 rounded text-sm font-medium transition ${
+                                                  editRestroomForm.gender === gender
+                                                    ? 'bg-teal-600 text-white'
+                                                    : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                                                }`}
+                                              >
+                                                {config.emoji} {config.label}
+                                              </button>
+                                            )
+                                          )}
+                                        </div>
+                                      </div>
+                                      {/* Station Location */}
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Station Location</label>
+                                        <div className="flex gap-2 flex-wrap">
+                                          {(Object.entries(STATION_LOCATION_CONFIG) as [StationLocation, { emoji: string; label: string }][]).map(
+                                            ([location, config]) => (
+                                              <button
+                                                key={location}
+                                                type="button"
+                                                onClick={() => setEditRestroomForm((prev) => ({ ...prev, station_location: location }))}
+                                                className={`px-3 py-1.5 rounded text-sm font-medium transition ${
+                                                  editRestroomForm.station_location === location
+                                                    ? 'bg-teal-600 text-white'
+                                                    : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                                                }`}
+                                              >
+                                                {config.emoji} {config.label}
+                                              </button>
+                                            )
+                                          )}
+                                        </div>
+                                      </div>
+                                      {/* Status */}
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                                        <div className="flex gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditRestroomForm((prev) => ({ ...prev, status: 'verified_present' }))}
+                                            className={`px-3 py-1.5 rounded text-sm font-medium transition ${
+                                              editRestroomForm.status === 'verified_present'
+                                                ? 'bg-green-600 text-white'
+                                                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                          >
+                                            ✅ Verified
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditRestroomForm((prev) => ({ ...prev, status: 'unverified' }))}
+                                            className={`px-3 py-1.5 rounded text-sm font-medium transition ${
+                                              editRestroomForm.status === 'unverified'
+                                                ? 'bg-amber-500 text-white'
+                                                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                          >
+                                            ❓ Unverified
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditRestroomForm((prev) => ({ ...prev, status: 'verified_absent' }))}
+                                            className={`px-3 py-1.5 rounded text-sm font-medium transition ${
+                                              editRestroomForm.status === 'verified_absent'
+                                                ? 'bg-red-600 text-white'
+                                                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                          >
+                                            ❌ Absent
+                                          </button>
+                                        </div>
+                                      </div>
+                                      {/* Location Text */}
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Location Description</label>
+                                        <input
+                                          type="text"
+                                          value={editRestroomForm.restroom_location_text}
+                                          onChange={(e) => setEditRestroomForm((prev) => ({ ...prev, restroom_location_text: e.target.value }))}
+                                          placeholder="e.g., Back hallway near kitchen"
+                                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+                                        />
+                                      </div>
+                                      {/* Notes */}
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                                        <input
+                                          type="text"
+                                          value={editRestroomForm.additional_notes}
+                                          onChange={(e) => setEditRestroomForm((prev) => ({ ...prev, additional_notes: e.target.value }))}
+                                          placeholder="e.g., Ask for key at counter"
+                                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+                                        />
+                                      </div>
+                                      {/* Checkboxes */}
+                                      <div className="flex gap-4">
+                                        <label className="flex items-center gap-2 text-sm">
+                                          <input
+                                            type="checkbox"
+                                            checked={editRestroomForm.has_safety_concern}
+                                            onChange={(e) => setEditRestroomForm((prev) => ({ ...prev, has_safety_concern: e.target.checked }))}
+                                            className="w-4 h-4 text-amber-500 border-gray-300 rounded"
+                                          />
+                                          Safety Concern
+                                        </label>
+                                        <label className="flex items-center gap-2 text-sm">
+                                          <input
+                                            type="checkbox"
+                                            checked={editRestroomForm.has_cleanliness_issue}
+                                            onChange={(e) => setEditRestroomForm((prev) => ({ ...prev, has_cleanliness_issue: e.target.checked }))}
+                                            className="w-4 h-4 text-amber-500 border-gray-300 rounded"
+                                          />
+                                          Cleanliness Issue
+                                        </label>
+                                      </div>
+                                      {/* Action Buttons */}
+                                      <div className="flex gap-2 pt-2">
+                                        <button
+                                          onClick={() => handleEditRestroom(restroom.id)}
+                                          disabled={editRestroomLoading}
+                                          className="px-4 py-2 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 disabled:bg-gray-400"
+                                        >
+                                          {editRestroomLoading ? 'Saving...' : 'Save Changes'}
+                                        </button>
+                                        <button
+                                          onClick={() => setEditingRestroomId(null)}
+                                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded text-sm font-medium hover:bg-gray-300"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    /* Restroom Display */
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-3">
+                                        <span className="text-lg">
+                                          {GENDER_CONFIG[restroom.gender]?.emoji}
+                                        </span>
+                                        <div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium text-gray-900">
+                                              {GENDER_CONFIG[restroom.gender]?.label}
+                                            </span>
+                                            <span className={`text-xs px-2 py-0.5 rounded ${
+                                              restroom.status === 'verified_present'
+                                                ? 'bg-green-100 text-green-700'
+                                                : restroom.status === 'unverified'
+                                                ? 'bg-amber-100 text-amber-700'
+                                                : 'bg-red-100 text-red-700'
+                                            }`}>
+                                              {STATUS_CONFIG[restroom.status]?.emoji} {STATUS_CONFIG[restroom.status]?.label}
+                                            </span>
+                                            {restroom.has_safety_concern && (
+                                              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">⚠️ Safety</span>
+                                            )}
+                                            {restroom.has_cleanliness_issue && (
+                                              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">🧹 Cleanliness</span>
+                                            )}
+                                          </div>
+                                          <p className="text-xs text-gray-500 mt-0.5">
+                                            {STATION_LOCATION_CONFIG[restroom.station_location]?.label}
+                                            {restroom.restroom_location_text && ` · ${restroom.restroom_location_text}`}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          onClick={() => startEditRestroom(restroom)}
+                                          className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          onClick={() => setDeleteRestroomConfirm({ restroom, venueName: venue.name })}
+                                          className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Add Station Button */}
+                        {addRestroomToVenueId === venue.id ? (
+                          <div className="border-t border-gray-200 pt-4">
+                            <RestroomFormComponent
+                              restroomForm={restroomForm}
+                              setRestroomForm={setRestroomForm}
+                              handleAddRestroom={async (e) => {
+                                e.preventDefault()
+                                const token = getAccessToken()
+                                if (!token) return
+
+                                setRestroomLoading(true)
+                                setRestroomError('')
+                                try {
+                                  const res = await fetch('/api/admin/restrooms', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      Authorization: `Bearer ${token}`,
+                                    },
+                                    body: JSON.stringify({
+                                      venue_id: venue.id,
+                                      ...restroomForm,
+                                    }),
+                                  })
+                                  const data = await res.json()
+                                  if (!res.ok) throw new Error(data.error || 'Failed to create restroom')
+
+                                  // Refresh venues list to get updated data
+                                  fetchExistingVenues()
+                                  fetchStats()
+                                  setAddRestroomToVenueId(null)
+                                  setRestroomForm({
+                                    gender: 'mens',
+                                    station_location: 'single_restroom',
+                                    restroom_location_text: '',
+                                    status: 'verified_present',
+                                    has_safety_concern: false,
+                                    safety_concern_notes: '',
+                                    has_cleanliness_issue: false,
+                                    cleanliness_issue_notes: '',
+                                    additional_notes: '',
+                                  })
+                                } catch (error) {
+                                  setRestroomError(error instanceof Error ? error.message : 'Failed to add restroom')
+                                } finally {
+                                  setRestroomLoading(false)
+                                }
+                              }}
+                              restroomLoading={restroomLoading}
+                              restroomError={restroomError}
+                              restroomSuccess={false}
+                              restrooms={[]}
+                            />
+                            <button
+                              onClick={() => setAddRestroomToVenueId(null)}
+                              className="w-full mt-2 py-2 text-gray-600 hover:text-gray-800 text-sm"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setAddRestroomToVenueId(venue.id)
+                              setRestroomForm({
+                                gender: 'mens',
+                                station_location: 'single_restroom',
+                                restroom_location_text: '',
+                                status: 'verified_present',
+                                has_safety_concern: false,
+                                safety_concern_notes: '',
+                                has_cleanliness_issue: false,
+                                cleanliness_issue_notes: '',
+                                additional_notes: '',
+                              })
+                            }}
+                            className="w-full py-2 border-2 border-dashed border-gray-300 text-gray-600 rounded-lg hover:border-teal-400 hover:text-teal-600 transition text-sm font-medium"
+                          >
+                            + Add Station to {venue.name}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Delete Venue Confirmation Modal */}
+            {deleteVenueConfirm && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl p-6 max-w-md w-full">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Venue?</h3>
+                  <p className="text-gray-600 mb-4">
+                    Are you sure you want to delete <strong>{deleteVenueConfirm.name}</strong>?
+                    {deleteVenueConfirm.restroom_count > 0 && (
+                      <span className="block mt-2 text-red-600">
+                        This will also delete {deleteVenueConfirm.restroom_count} changing station
+                        {deleteVenueConfirm.restroom_count !== 1 ? 's' : ''}.
+                      </span>
+                    )}
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => handleDeleteVenue(deleteVenueConfirm)}
+                      disabled={deleteVenueLoading}
+                      className="flex-1 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:bg-gray-400"
+                    >
+                      {deleteVenueLoading ? 'Deleting...' : 'Delete'}
+                    </button>
+                    <button
+                      onClick={() => setDeleteVenueConfirm(null)}
+                      className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Delete Restroom Confirmation Modal */}
+            {deleteRestroomConfirm && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl p-6 max-w-md w-full">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Station?</h3>
+                  <p className="text-gray-600 mb-4">
+                    Are you sure you want to delete the{' '}
+                    <strong>{GENDER_CONFIG[deleteRestroomConfirm.restroom.gender]?.label}</strong> station
+                    from <strong>{deleteRestroomConfirm.venueName}</strong>?
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => handleDeleteRestroom(deleteRestroomConfirm.restroom.id)}
+                      disabled={deleteRestroomLoading}
+                      className="flex-1 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:bg-gray-400"
+                    >
+                      {deleteRestroomLoading ? 'Deleting...' : 'Delete'}
+                    </button>
+                    <button
+                      onClick={() => setDeleteRestroomConfirm(null)}
+                      className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
