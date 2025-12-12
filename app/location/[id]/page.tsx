@@ -65,16 +65,14 @@ async function getVenueDetails(id: string): Promise<VenueDetail | null> {
       return null
     }
 
-    const filteredRestrooms = (venue.restrooms || []).filter(
-      (r: { status: string }) => r.status !== 'verified_absent'
-    )
-
+    // Keep all restrooms including verified_absent for detail page
+    // so users can see the full breakdown per gender
     const is_open = isVenueOpen(venue.hours_json)
     const hours_today = getTodayHours(venue.hours_json)
 
     return {
       ...venue,
-      restrooms: filteredRestrooms,
+      restrooms: venue.restrooms || [],
       is_open,
       hours_today,
     }
@@ -97,6 +95,10 @@ export default async function LocationDetailPage({
 
   const verifiedRestrooms = venue.restrooms.filter((r) => r.status === 'verified_present')
   const unverifiedRestrooms = venue.restrooms.filter((r) => r.status === 'unverified')
+  const absentRestrooms = venue.restrooms.filter((r) => r.status === 'verified_absent')
+
+  // Count only verified + unverified for the main count (not absent)
+  const availableCount = verifiedRestrooms.length + unverifiedRestrooms.length
 
   const weeklyHours = getFormattedWeeklyHours(venue.hours_json)
 
@@ -167,7 +169,7 @@ export default async function LocationDetailPage({
         {/* Changing Stations Section */}
         <div className="p-6 bg-white border-t border-gray-200">
           <h2 className="text-lg font-bold text-gray-900 mb-4">
-            Changing Stations ({venue.restrooms.length})
+            Changing Stations ({availableCount})
           </h2>
 
           {/* Verified Section */}
@@ -264,6 +266,43 @@ export default async function LocationDetailPage({
                     <p className="text-sm text-gray-500 mt-2">
                       ? Needs verification
                     </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Not Available Section */}
+          {absentRestrooms.length > 0 && (
+            <div className={availableCount > 0 ? 'mt-6' : ''}>
+              <h3 className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-red-500 rounded-full" />
+                Not Available ({absentRestrooms.length})
+              </h3>
+              <div className="space-y-3">
+                {absentRestrooms.map((restroom) => (
+                  <div
+                    key={restroom.id}
+                    className="bg-red-50 rounded-xl border border-red-200 p-4"
+                  >
+                    {/* Gender chip */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-100 border border-red-300 text-red-700 rounded-full text-sm font-medium">
+                        {GENDER_CONFIG[restroom.gender].emoji} {GENDER_CONFIG[restroom.gender].label}
+                      </span>
+                    </div>
+
+                    {/* Absent status */}
+                    <p className="text-sm text-red-600 mt-2">
+                      ✗ No changing station in this restroom
+                    </p>
+
+                    {/* Notes if any */}
+                    {restroom.restroom_location_text && (
+                      <p className="text-sm text-gray-600 mt-2 bg-white/50 rounded-lg px-3 py-2">
+                        {restroom.restroom_location_text}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
